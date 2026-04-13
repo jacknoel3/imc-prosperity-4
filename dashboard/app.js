@@ -337,8 +337,26 @@ async function loadStrategyOverlay() {
     }
 
     state.strategyOverlay = overlay;
+    const overlayProducts = [...overlay.products.keys()];
+    if (
+      overlayProducts.length === 1 &&
+      overlayProducts[0] !== state.selectedProduct &&
+      getActiveDataset()?.products.has(overlayProducts[0])
+    ) {
+      state.selectedProduct = overlayProducts[0];
+      if (els.productSelect) {
+        els.productSelect.value = overlayProducts[0];
+      }
+      initializeTimeRange();
+      renderIndicatorToggles();
+    }
+
     renderAll();
-    setStatus(`Loaded backtest overlay: ${strategyFile.name}`);
+    if (overlayProducts.length === 1) {
+      setStatus(`Loaded backtest overlay: ${strategyFile.name} for ${overlayProducts[0]}.`);
+    } else {
+      setStatus(`Loaded backtest overlay: ${strategyFile.name}`);
+    }
   } catch (error) {
     console.error(error);
     setStatus(`Could not parse backtest overlay: ${error.message}`);
