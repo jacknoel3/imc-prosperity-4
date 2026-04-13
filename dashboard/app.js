@@ -30,6 +30,9 @@ const COLORS = {
   tradeBuy: "rgba(215, 116, 24, 0.85)",
   tradeSell: "rgba(16, 129, 118, 0.85)",
   tradeOwn: "rgba(25, 29, 36, 0.92)",
+  strategyBuy: "rgba(229, 147, 0, 0.98)",
+  strategySell: "rgba(192, 72, 72, 0.98)",
+  strategyUnknown: "rgba(74, 84, 96, 0.98)",
   grid: "rgba(47, 62, 82, 0.12)",
   axis: "rgba(41, 55, 71, 0.75)",
   midPrice: "rgba(47, 62, 82, 0.85)",
@@ -61,9 +64,11 @@ const state = {
   showAsks: true,
   showMarketTrades: true,
   showOwnTrades: true,
+  showStrategyTrades: true,
   visibleLevels: { 1: true, 2: true, 3: true },
   visibleIndicators: new Set(["midPrice", "wallMid"]),
   hoveredTimestamp: null,
+  strategyOverlay: null,
 };
 
 const els = {};
@@ -89,6 +94,7 @@ function bindElements() {
   els.showAsksToggle = document.getElementById("show-asks-toggle");
   els.showMarketTradesToggle = document.getElementById("show-market-trades-toggle");
   els.showOwnTradesToggle = document.getElementById("show-own-trades-toggle");
+  els.showStrategyTradesToggle = document.getElementById("show-strategy-trades-toggle");
   els.level1Toggle = document.getElementById("level-1-toggle");
   els.level2Toggle = document.getElementById("level-2-toggle");
   els.level3Toggle = document.getElementById("level-3-toggle");
@@ -111,9 +117,12 @@ function bindElements() {
   els.mainTooltip = document.getElementById("main-tooltip");
   els.uploadPriceInput = document.getElementById("upload-price-input");
   els.uploadTradeInput = document.getElementById("upload-trade-input");
+  els.uploadStrategyTradesInput = document.getElementById("upload-strategy-trades-input");
   els.uploadIndicatorInput = document.getElementById("upload-indicator-input");
   els.uploadLogInput = document.getElementById("upload-log-input");
   els.loadUploadedButton = document.getElementById("load-uploaded-button");
+  els.loadStrategyOverlayButton = document.getElementById("load-strategy-overlay-button");
+  els.clearStrategyOverlayButton = document.getElementById("clear-strategy-overlay-button");
 }
 
 function bindEvents() {
@@ -170,6 +179,11 @@ function bindEvents() {
     renderAll();
   });
 
+  els.showStrategyTradesToggle.addEventListener("change", (event) => {
+    state.showStrategyTrades = event.target.checked;
+    renderAll();
+  });
+
   els.level1Toggle.addEventListener("change", (event) => {
     state.visibleLevels[1] = event.target.checked;
     renderAll();
@@ -189,6 +203,8 @@ function bindEvents() {
   els.ownTraderIdsInput.addEventListener("keyup", () => renderAll());
 
   els.loadUploadedButton.addEventListener("click", () => loadUploadedDataset());
+  els.loadStrategyOverlayButton.addEventListener("click", () => loadStrategyOverlay());
+  els.clearStrategyOverlayButton.addEventListener("click", () => clearStrategyOverlay());
 
   els.mainChartWrapper.addEventListener("mousemove", handleChartHover);
   els.mainChartWrapper.addEventListener("mouseleave", () => {
@@ -301,6 +317,43 @@ async function loadUploadedDataset() {
   }
 }
 
+async function loadStrategyOverlay() {
+  const strategyFile = els.uploadStrategyTradesInput.files[0];
+  if (!strategyFile) {
+    setStatus("Choose a backtest trades CSV before loading the overlay.");
+    return;
+  }
+
+  try {
+    setStatus("Parsing backtest overlay...");
+    const strategyText = await strategyFile.text();
+    const overlay = buildStrategyOverlay({
+      label: strategyFile.name,
+      strategyRowsRaw: parseDelimitedText(strategyText),
+    });
+
+    if (!overlay.products.size) {
+      throw new Error("No usable strategy trades were found.");
+    }
+
+    state.strategyOverlay = overlay;
+    renderAll();
+    setStatus(`Loaded backtest overlay: ${strategyFile.name}`);
+  } catch (error) {
+    console.error(error);
+    setStatus(`Could not parse backtest overlay: ${error.message}`);
+  }
+}
+
+function clearStrategyOverlay() {
+  state.strategyOverlay = null;
+  if (els.uploadStrategyTradesInput) {
+    els.uploadStrategyTradesInput.value = "";
+  }
+  renderAll();
+  setStatus("Cleared backtest overlay.");
+}
+
 function populateDatasetSelect() {
   const options = [...BUILTIN_DATASETS];
   if (state.datasets.has("uploaded")) {
@@ -390,9 +443,14 @@ function renderAll() {
   els.datasetSummary.textContent = `${formatInteger(dataset.priceRows.length)} book rows, ${formatInteger(
     dataset.tradeRows.length,
   )} trades, ${dataset.products.size} products`;
-  els.chartSummary.textContent = `${formatInteger(view.filteredRows.length)} snapshots in view, ${formatInteger(
-    view.visibleTrades.length,
-  )} trades shown`;
+  const summaryParts = [
+    `${formatInteger(view.filteredRows.length)} snapshots in view`,
+    `${formatInteger(view.visibleTrades.length)} market trades shown`,
+  ];
+  if (state.strategyOverlay) {
+    summaryParts.push(`${formatInteger(view.visibleStrategyTrades.length)} backtest trades shown`);
+  }
+  els.chartSummary.textContent = summaryParts.join(", ");
 
   updateStatsCard(view);
   updateSnapshotAndLogCards(view, getHoveredRow(view) || view.filteredRows[0] || null);
@@ -436,6 +494,13 @@ function buildView(dataset, productData) {
       return state.showMarketTrades;
     });
 
+  const strategyProduct = getStrategyProductData();
+  const visibleStrategyTrades = strategyProduct && state.showStrategyTrades
+    ? strategyProduct.trades
+        .filter((trade) => trade.timestamp >= rangeMin && trade.timestamp <= rangeMax)
+        .filter((trade) => trade.quantity >= tradeMin && trade.quantity <= tradeMax)
+    : [];
+
   const yValues = [];
   const indicatorSeries = [];
 
@@ -478,6 +543,13 @@ function buildView(dataset, productData) {
     }
   });
 
+  visibleStrategyTrades.forEach((trade) => {
+    const row = productData.rowByTimestamp.get(trade.timestamp);
+    if (row) {
+      yValues.push(normalizePrice(row, trade.price));
+    }
+  });
+
   if (!yValues.length) {
     filteredRows.forEach((row) => yValues.push(normalizePrice(row, row.midPrice)));
   }
@@ -496,12 +568,14 @@ function buildView(dataset, productData) {
   return {
     dataset,
     productData,
+    strategyProduct,
     fullMin,
     fullMax,
     rangeMin,
     rangeMax,
     filteredRows,
     visibleTrades,
+    visibleStrategyTrades,
     selectedLevels,
     indicatorSeries,
     yMin,
@@ -532,6 +606,7 @@ function renderMainChart(view = buildView(getActiveDataset(), getActiveProductDa
 
   drawIndicatorLines(ctx, view.indicatorSeries, xScale, yScale, view.productData);
   drawTrades(ctx, view.visibleTrades, xScale, yScale, view.productData);
+  drawStrategyTrades(ctx, view.visibleStrategyTrades, xScale, yScale, view.productData);
 
   const hoveredRow = getHoveredRow(view);
   if (hoveredRow) {
@@ -548,21 +623,21 @@ function renderMainChart(view = buildView(getActiveDataset(), getActiveProductDa
 }
 
 function renderMiniCharts(view) {
-  const pnlSeries = buildPnlSeries(view.productData);
-  const positionSeries = buildPositionSeries(view.productData);
+  const pnlSeries = buildPnlSeries(view.productData, view.strategyProduct);
+  const positionSeries = buildPositionSeries(view.productData, view.strategyProduct);
 
   renderSeriesChart(
     els.pnlChart,
     pnlSeries,
     COLORS.pnl,
-    "No backtest PnL available yet. Load your own backtest export or own trades to populate this panel.",
+    "No backtest PnL available yet. Load a backtest overlay or own trades to populate this panel.",
   );
 
   renderSeriesChart(
     els.positionChart,
     positionSeries,
     COLORS.position,
-    "No own trades detected yet. Set your trader ID or load a trade export with buyer and seller IDs.",
+    "No strategy position data yet. Load a backtest overlay or set your trader ID in the trade export.",
   );
 
   if (pnlSeries.length) {
@@ -597,11 +672,16 @@ function updateStatsCard(view) {
     `range: ${formatInteger(view.rangeMin)} -> ${formatInteger(view.rangeMax)}`,
     `rows in view: ${formatInteger(view.filteredRows.length)}`,
     `trades shown: ${formatInteger(view.visibleTrades.length)}`,
+    `backtest trades shown: ${formatInteger(view.visibleStrategyTrades.length)}`,
     `avg spread: ${formatMaybe(avgSpread)}`,
     `mid range: ${formatMaybe(minMid)} -> ${formatMaybe(maxMid)}`,
     `normalization: ${state.normalization}`,
     `downsample: ${state.downsample}x`,
   ];
+
+  if (state.strategyOverlay) {
+    lines.push(`backtest overlay: ${state.strategyOverlay.label}`);
+  }
 
   els.statsCard.textContent = lines.join("\n");
 }
@@ -614,6 +694,9 @@ function updateSnapshotAndLogCards(view, row) {
   }
 
   const trades = view.visibleTrades
+    .filter((trade) => trade.timestamp === row.timestamp)
+    .slice(0, 8);
+  const strategyTrades = view.visibleStrategyTrades
     .filter((trade) => trade.timestamp === row.timestamp)
     .slice(0, 8);
 
@@ -635,6 +718,21 @@ function updateSnapshotAndLogCards(view, row) {
     trades.forEach((trade) => {
       const label = trade.isOwn ? "own" : trade.side;
       snapshotLines.push(`- ${label} ${trade.quantity} @ ${formatMaybe(trade.price)}`);
+    });
+  }
+
+  if (strategyTrades.length) {
+    snapshotLines.push("", "backtest fills:");
+    strategyTrades.forEach((trade) => {
+      const label = trade.side || "unknown";
+      let suffix = "";
+      if (Number.isFinite(trade.position)) {
+        suffix += ` pos=${formatMaybe(trade.position)}`;
+      }
+      if (Number.isFinite(trade.pnl)) {
+        suffix += ` pnl=${formatMaybe(trade.pnl)}`;
+      }
+      snapshotLines.push(`- ${label} ${trade.quantity} @ ${formatMaybe(trade.price)}${suffix}`);
     });
   }
 
@@ -684,6 +782,7 @@ function handleChartHover(event) {
 
 function showTooltip(event, view, row) {
   const trades = view.visibleTrades.filter((trade) => trade.timestamp === row.timestamp);
+  const strategyTrades = view.visibleStrategyTrades.filter((trade) => trade.timestamp === row.timestamp);
   const lines = [
     `t=${formatInteger(row.timestamp)}`,
     `mid=${formatMaybe(row.midPrice)} wall=${formatMaybe(row.wallMid)}`,
@@ -695,6 +794,13 @@ function showTooltip(event, view, row) {
     trades.slice(0, 5).forEach((trade) => {
       const marker = trade.isOwn ? "own" : trade.side;
       lines.push(`${marker}: ${trade.quantity} @ ${formatMaybe(trade.price)}`);
+    });
+  }
+
+  if (strategyTrades.length) {
+    lines.push(`backtest=${strategyTrades.length}`);
+    strategyTrades.slice(0, 5).forEach((trade) => {
+      lines.push(`bt ${trade.side}: ${trade.quantity} @ ${formatMaybe(trade.price)}`);
     });
   }
 
@@ -821,6 +927,31 @@ function renderLegend(view) {
     buildLegendItem(drawLegendCross(COLORS.tradeOwn), "Own trade", !state.showOwnTrades),
   );
 
+  items.push(
+    buildLegendItem(
+      drawLegendDiamond(COLORS.strategyBuy),
+      "Backtest buy fill",
+      !state.showStrategyTrades || !view.visibleStrategyTrades.some((trade) => trade.side === "buy"),
+    ),
+  );
+  items.push(
+    buildLegendItem(
+      drawLegendDiamond(COLORS.strategySell),
+      "Backtest sell fill",
+      !state.showStrategyTrades || !view.visibleStrategyTrades.some((trade) => trade.side === "sell"),
+    ),
+  );
+
+  if (view.visibleStrategyTrades.some((trade) => trade.side === "unknown")) {
+    items.push(
+      buildLegendItem(
+        drawLegendDiamond(COLORS.strategyUnknown),
+        "Backtest fill (unknown side)",
+        !state.showStrategyTrades,
+      ),
+    );
+  }
+
   if (view.indicatorSeries.length) {
     view.indicatorSeries.forEach((indicator) => {
       items.push(
@@ -843,7 +974,12 @@ function renderLegend(view) {
     ? view.selectedLevels.map((level) => `L${level}`).join(", ")
     : "none";
 
-  els.legendNote.textContent = `${normalizationLabel} Visible book levels: ${levelsLabel}. Quote dot size scales with quoted volume. Trade direction is inferred from price vs. the current book unless the trade matches one of your trader IDs.`;
+  let overlayLabel = "No backtest overlay loaded.";
+  if (state.strategyOverlay) {
+    overlayLabel = `Backtest overlay loaded: ${state.strategyOverlay.label}. Strategy fills are drawn last so they sit on top of the market plot.`;
+  }
+
+  els.legendNote.textContent = `${normalizationLabel} Visible book levels: ${levelsLabel}. Quote dot size scales with quoted volume. Market trade direction is inferred from price vs. the current book unless the trade matches one of your trader IDs. ${overlayLabel}`;
 }
 
 function drawTrades(ctx, trades, xScale, yScale, productData) {
@@ -905,6 +1041,41 @@ function drawSquare(ctx, x, y, size, color) {
   ctx.restore();
 }
 
+function drawStrategyTrades(ctx, trades, xScale, yScale, productData) {
+  for (const trade of trades) {
+    const row = productData.rowByTimestamp.get(trade.timestamp);
+    if (!row) {
+      continue;
+    }
+
+    const x = xScale(trade.timestamp);
+    const y = yScale(normalizePrice(row, trade.price));
+    const color =
+      trade.side === "buy"
+        ? COLORS.strategyBuy
+        : trade.side === "sell"
+          ? COLORS.strategySell
+          : COLORS.strategyUnknown;
+    drawDiamond(ctx, x, y, 9, color, "rgba(25, 29, 36, 0.95)");
+  }
+}
+
+function drawDiamond(ctx, x, y, size, fillColor, strokeColor) {
+  ctx.save();
+  ctx.fillStyle = fillColor;
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(x, y - size);
+  ctx.lineTo(x + size, y);
+  ctx.lineTo(x, y + size);
+  ctx.lineTo(x - size, y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
 function buildLegendItem(icon, label, hidden) {
   const hiddenClass = hidden ? " is-hidden" : "";
   return `<div class="legend-item${hiddenClass}">${icon}<span>${escapeHtml(label)}</span></div>`;
@@ -929,6 +1100,10 @@ function drawLegendCross(color) {
 
 function drawLegendSquare(color) {
   return `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="3" width="10" height="10" fill="${color}"></rect></svg>`;
+}
+
+function drawLegendDiamond(color) {
+  return `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><polygon points="8,1 15,8 8,15 1,8" fill="${color}" stroke="rgba(25, 29, 36, 0.95)" stroke-width="1.25"></polygon></svg>`;
 }
 
 function renderSeriesChart(canvas, series, color, emptyMessage) {
@@ -980,9 +1155,19 @@ function renderSeriesChart(canvas, series, color, emptyMessage) {
   ctx.restore();
 }
 
-function buildPnlSeries(productData) {
+function buildPnlSeries(productData, strategyProduct) {
   if (!productData) {
     return [];
+  }
+
+  const strategySeries = buildStrategyMetricSeries(productData, strategyProduct, "pnl");
+  if (strategySeries.length) {
+    return strategySeries;
+  }
+
+  const computedFromStrategy = buildStrategyMarkToMidSeries(productData, strategyProduct);
+  if (computedFromStrategy.length) {
+    return computedFromStrategy;
   }
 
   const hasNonZeroPnl = productData.rows.some((row) => Math.abs(row.pnl) > 1e-9);
@@ -1025,9 +1210,19 @@ function buildPnlSeries(productData) {
   return series;
 }
 
-function buildPositionSeries(productData) {
+function buildPositionSeries(productData, strategyProduct) {
   if (!productData) {
     return [];
+  }
+
+  const strategySeries = buildStrategyMetricSeries(productData, strategyProduct, "position");
+  if (strategySeries.length) {
+    return strategySeries;
+  }
+
+  const computedFromStrategy = buildStrategyPositionSeries(productData, strategyProduct);
+  if (computedFromStrategy.length) {
+    return computedFromStrategy;
   }
 
   const ownTrades = productData.trades
@@ -1051,6 +1246,99 @@ function buildPositionSeries(productData) {
       } else if (trade.side === "sell") {
         position -= trade.quantity;
       }
+    });
+
+    series.push({
+      timestamp: row.timestamp,
+      value: position,
+    });
+  }
+
+  return series;
+}
+
+function buildStrategyMetricSeries(productData, strategyProduct, field) {
+  if (!strategyProduct) {
+    return [];
+  }
+
+  const trades = strategyProduct.trades.filter((trade) => Number.isFinite(trade[field]));
+  if (!trades.length) {
+    return [];
+  }
+
+  const series = [];
+  let index = 0;
+  let currentValue = 0;
+  let hasSeenValue = false;
+
+  for (const row of productData.rows) {
+    while (index < strategyProduct.trades.length && strategyProduct.trades[index].timestamp <= row.timestamp) {
+      const trade = strategyProduct.trades[index];
+      if (Number.isFinite(trade[field])) {
+        currentValue = trade[field];
+        hasSeenValue = true;
+      }
+      index += 1;
+    }
+
+    if (hasSeenValue) {
+      series.push({ timestamp: row.timestamp, value: currentValue });
+    }
+  }
+
+  return series;
+}
+
+function buildStrategyMarkToMidSeries(productData, strategyProduct) {
+  if (!strategyProduct) {
+    return [];
+  }
+
+  const executableTrades = strategyProduct.trades.filter((trade) => Number.isFinite(trade.signedQuantity));
+  if (!executableTrades.length) {
+    return [];
+  }
+
+  const tradesByTimestamp = groupBy(executableTrades, (trade) => trade.timestamp);
+  const series = [];
+  let cash = 0;
+  let position = 0;
+
+  for (const row of productData.rows) {
+    const trades = tradesByTimestamp.get(row.timestamp) || [];
+    trades.forEach((trade) => {
+      position += trade.signedQuantity;
+      cash -= trade.signedQuantity * trade.price;
+    });
+
+    series.push({
+      timestamp: row.timestamp,
+      value: cash + position * row.midPrice,
+    });
+  }
+
+  return series;
+}
+
+function buildStrategyPositionSeries(productData, strategyProduct) {
+  if (!strategyProduct) {
+    return [];
+  }
+
+  const executableTrades = strategyProduct.trades.filter((trade) => Number.isFinite(trade.signedQuantity));
+  if (!executableTrades.length) {
+    return [];
+  }
+
+  const tradesByTimestamp = groupBy(executableTrades, (trade) => trade.timestamp);
+  const series = [];
+  let position = 0;
+
+  for (const row of productData.rows) {
+    const trades = tradesByTimestamp.get(row.timestamp) || [];
+    trades.forEach((trade) => {
+      position += trade.signedQuantity;
     });
 
     series.push({
@@ -1184,6 +1472,35 @@ function buildDataset({ key, label, priceRowsRaw, tradeRowsRaw, indicatorRowsRaw
   return { key, label, priceRows, tradeRows, indicatorRows, logRows, products };
 }
 
+function buildStrategyOverlay({ label, strategyRowsRaw }) {
+  const strategyRows = strategyRowsRaw
+    .map((row) => normalizeStrategyTradeRow(row))
+    .filter(
+      (row) =>
+        row.product &&
+        Number.isFinite(row.timestamp) &&
+        Number.isFinite(row.price) &&
+        Number.isFinite(row.quantity) &&
+        row.quantity > 0,
+    )
+    .sort((left, right) => {
+      if (left.product === right.product) {
+        return left.timestamp - right.timestamp;
+      }
+      return left.product.localeCompare(right.product);
+    });
+
+  const products = new Map();
+  strategyRows.forEach((row) => {
+    if (!products.has(row.product)) {
+      products.set(row.product, { trades: [] });
+    }
+    products.get(row.product).trades.push(row);
+  });
+
+  return { label, trades: strategyRows, products };
+}
+
 function normalizePriceRow(row) {
   const bids = [];
   const asks = [];
@@ -1264,6 +1581,62 @@ function normalizeLogRow(row) {
   };
 }
 
+function normalizeStrategyTradeRow(row) {
+  const product = String(
+    firstDefinedValue(row, ["product", "symbol", "instrument", "asset"]) || "",
+  ).trim();
+  const timestamp = firstNumberValue(row, ["timestamp", "time", "ts"]);
+  const price = firstNumberValue(row, ["price", "trade_price", "fill_price", "execution_price"]);
+  const explicitSignedQuantity = firstNumberValue(row, [
+    "signed_quantity",
+    "signed_qty",
+    "net_quantity",
+    "signed_volume",
+  ]);
+  const rawQuantity =
+    explicitSignedQuantity ??
+    firstNumberValue(row, ["quantity", "qty", "volume", "size", "filled_quantity"]);
+  const side =
+    normalizeTradeSide(firstDefinedValue(row, ["side", "action", "direction", "trade_side", "order_side"])) ||
+    normalizeBooleanSide(firstDefinedValue(row, ["is_buy", "buy"]));
+  let signedQuantity = null;
+  if (Number.isFinite(explicitSignedQuantity)) {
+    signedQuantity = explicitSignedQuantity;
+  } else if (Number.isFinite(rawQuantity) && rawQuantity < 0) {
+    signedQuantity = rawQuantity;
+  } else if (Number.isFinite(rawQuantity) && side === "buy") {
+    signedQuantity = rawQuantity;
+  } else if (Number.isFinite(rawQuantity) && side === "sell") {
+    signedQuantity = -rawQuantity;
+  }
+
+  const quantity = Number.isFinite(rawQuantity)
+    ? Math.abs(rawQuantity)
+    : Number.isFinite(signedQuantity)
+      ? Math.abs(signedQuantity)
+      : NaN;
+  const normalizedSide =
+    side ||
+    (Number.isFinite(signedQuantity)
+      ? signedQuantity > 0
+        ? "buy"
+        : signedQuantity < 0
+          ? "sell"
+          : "unknown"
+      : "unknown");
+
+  return {
+    timestamp,
+    product,
+    price,
+    quantity,
+    signedQuantity,
+    side: normalizedSide,
+    pnl: firstNumberValue(row, ["pnl", "profit_and_loss", "profit", "realized_pnl", "total_pnl"]),
+    position: firstNumberValue(row, ["position", "pos", "inventory", "net_position"]),
+  };
+}
+
 function decorateTrade(trade, bookRow, ownIds) {
   const normalizedBuyer = normalizeId(trade.buyer);
   const normalizedSeller = normalizeId(trade.seller);
@@ -1304,7 +1677,12 @@ function parseDelimitedText(text) {
     const values = splitDelimitedLine(line, delimiter);
     const row = {};
     headers.forEach((header, index) => {
-      row[header] = (values[index] || "").trim();
+      const value = (values[index] || "").trim();
+      row[header] = value;
+      const lowerKey = header.toLowerCase();
+      if (!(lowerKey in row)) {
+        row[lowerKey] = value;
+      }
     });
     return row;
   });
@@ -1407,6 +1785,14 @@ function getActiveProductData() {
   return dataset.products.get(state.selectedProduct) || null;
 }
 
+function getStrategyProductData() {
+  if (!state.strategyOverlay) {
+    return null;
+  }
+
+  return state.strategyOverlay.products.get(state.selectedProduct) || null;
+}
+
 function getHoveredRow(view) {
   if (!state.hoveredTimestamp) {
     return null;
@@ -1507,6 +1893,57 @@ function toNumber(value) {
 
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function firstDefinedValue(row, keys) {
+  for (const key of keys) {
+    if (Object.hasOwn(row, key) && row[key] !== "") {
+      return row[key];
+    }
+  }
+  return null;
+}
+
+function firstNumberValue(row, keys) {
+  for (const key of keys) {
+    if (Object.hasOwn(row, key)) {
+      const number = toNumber(row[key]);
+      if (Number.isFinite(number)) {
+        return number;
+      }
+    }
+  }
+  return null;
+}
+
+function normalizeTradeSide(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  if (["buy", "bid", "b", "long", "1"].includes(normalized)) {
+    return "buy";
+  }
+
+  if (["sell", "ask", "s", "short", "-1"].includes(normalized)) {
+    return "sell";
+  }
+
+  return null;
+}
+
+function normalizeBooleanSide(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (["true", "yes", "1"].includes(normalized)) {
+    return "buy";
+  }
+
+  if (["false", "no", "0"].includes(normalized)) {
+    return "sell";
+  }
+
+  return null;
 }
 
 function clampNumber(value, min, max) {
