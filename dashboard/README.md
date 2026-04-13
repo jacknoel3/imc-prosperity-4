@@ -31,6 +31,77 @@ It ships with built-in selectors for:
 - `Round 0 / Day -1`
 - `Round 0 / Day -2`
 
+## Viewing Your Strategy In The Dashboard
+
+The dashboard is a viewer, not the backtester itself. You do not upload `trader.py`
+directly into the dashboard.
+
+The workflow is:
+
+1. Run your strategy in your backtester.
+2. Export your strategy fills to a `Backtest Trades CSV`.
+3. Open the dashboard and choose the market dataset you want in the background.
+4. Load the `Backtest Trades CSV` as an overlay.
+
+### Minimal workflow for the built-in tutorial data
+
+If your strategy was backtested on the tutorial round data already included in this repo,
+you usually only need one file:
+
+- `Backtest Trades CSV`
+
+Steps:
+
+1. Start the dashboard:
+
+```bash
+python3 -m http.server 8000
+```
+
+2. Open:
+
+```text
+http://localhost:8000/dashboard/
+```
+
+3. In the dashboard, select:
+
+- `Round 0 / Day -1` or
+- `Round 0 / Day -2`
+
+4. Upload your `Backtest Trades CSV`.
+5. Click `Load Backtest Overlay`.
+
+Your strategy fills will then appear on top of the market plot as diamond markers.
+The PnL and Position panels will also use this backtest overlay when possible.
+
+### When you need the other upload fields
+
+You do not need to upload every file.
+
+- `Backtest Trades CSV`: your strategy fills. This is the main file for visualizing your strategy.
+- `Price CSV`: only needed if you want to use a custom market dataset instead of the built-in tutorial data.
+- `Trade CSV`: only needed if you want to show custom market trades instead of the built-in market trade file.
+- `Indicator CSV`: optional. Use this if you want to overlay your own fair values, EMAs, z-scores, spreads, or other indicators.
+- `Log File`: optional. Use this if you want timestamp-synced log messages in the log panel.
+
+### Common use cases
+
+Built-in tutorial data:
+
+- upload only `Backtest Trades CSV`
+
+Custom backtest dataset:
+
+- upload `Price CSV`
+- click `Load Uploaded Files`
+- then upload `Backtest Trades CSV`
+- click `Load Backtest Overlay`
+
+Custom indicators/logs:
+
+- upload `Indicator CSV` and/or `Log File` only if you want those panels populated
+
 ## Built-In Data Expectations
 
 The dashboard reads the current Prosperity tutorial CSVs directly:
@@ -68,6 +139,39 @@ timestamp,product,price,quantity,side,pnl,position
 - you can also provide a signed quantity field such as `signed_quantity`
 - optional fields: `pnl`, `position`
 - supported aliases include `qty`, `trade_price`, `fill_price`, `action`, `direction`, `pos`, `profit_and_loss`
+
+Examples of accepted backtest trade formats:
+
+```text
+timestamp,product,price,quantity,side
+100,EMERALDS,9998,5,buy
+400,EMERALDS,10002,5,sell
+```
+
+```text
+timestamp,symbol,fill_price,signed_quantity,pnl,position
+100,EMERALDS,9998,5,0,5
+400,EMERALDS,10002,-5,20,0
+```
+
+Supported column names for the backtest overlay include:
+
+- time: `timestamp`, `time`, `ts`
+- product: `product`, `symbol`, `instrument`, `asset`
+- price: `price`, `trade_price`, `fill_price`, `execution_price`
+- quantity: `quantity`, `qty`, `volume`, `size`, `filled_quantity`
+- signed quantity: `signed_quantity`, `signed_qty`, `net_quantity`, `signed_volume`
+- side: `side`, `action`, `direction`, `trade_side`, `order_side`
+- pnl: `pnl`, `profit_and_loss`, `profit`, `realized_pnl`, `total_pnl`
+- position: `position`, `pos`, `inventory`, `net_position`
+
+Notes:
+
+- headers are matched case-insensitively, so `Timestamp` and `timestamp` both work
+- if you provide signed quantity, the dashboard can infer buy vs sell automatically
+- if you provide `pnl` and `position`, those values are used directly for the lower panels
+- if you do not provide `pnl`, the dashboard estimates PnL by marking your trades to mid price
+- if you do not provide `position`, the dashboard reconstructs position from your trade flow
 
 Indicator CSV:
 
