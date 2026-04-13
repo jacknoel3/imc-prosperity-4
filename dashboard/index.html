@@ -96,6 +96,10 @@
             <input id="show-own-trades-toggle" type="checkbox" checked />
             <span>Own Trades</span>
           </label>
+          <label class="toggle-inline">
+            <input id="show-strategy-trades-toggle" type="checkbox" checked />
+            <span>Backtest Trades</span>
+          </label>
         </div>
 
         <div class="toggle-sections">
@@ -214,6 +218,11 @@
             </label>
 
             <label class="field">
+              <span>Backtest Trades CSV</span>
+              <input id="upload-strategy-trades-input" type="file" accept=".csv,.txt" />
+            </label>
+
+            <label class="field">
               <span>Indicator CSV</span>
               <input id="upload-indicator-input" type="file" accept=".csv,.txt" />
             </label>
@@ -226,7 +235,11 @@
 
           <div class="controls-actions">
             <button id="load-uploaded-button" type="button">Load Uploaded Files</button>
+            <button id="load-strategy-overlay-button" type="button">Load Backtest Overlay</button>
+            <button id="clear-strategy-overlay-button" type="button">Clear Backtest Overlay</button>
             <p class="helper-text">
+              Backtest trade format: `timestamp,product,price,quantity,side` with optional
+              `pnl` and `position`. Quantity can also be signed instead of providing `side`.
               Indicator format: `timestamp,product,name,value`. Log format:
               `timestamp,product,message` or JSONL with those fields.
             </p>
