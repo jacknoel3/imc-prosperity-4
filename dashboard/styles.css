@@ -280,6 +280,41 @@ canvas {
   margin: 0;
 }
 
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  margin-top: 14px;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(12, 92, 123, 0.12);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.legend-item.is-hidden {
+  opacity: 0.46;
+}
+
+.legend-item svg {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.legend-note {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .tooltip {
   position: absolute;
   pointer-events: none;

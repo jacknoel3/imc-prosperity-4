@@ -42,6 +42,15 @@ const COLORS = {
   position: "rgba(194, 59, 59, 1)",
 };
 
+const CUSTOM_LINE_PALETTE = [
+  "rgba(79, 91, 176, 0.92)",
+  "rgba(196, 103, 51, 0.92)",
+  "rgba(30, 127, 99, 0.92)",
+  "rgba(148, 86, 179, 0.92)",
+  "rgba(191, 82, 126, 0.92)",
+  "rgba(118, 104, 57, 0.92)",
+];
+
 const state = {
   datasets: new Map(),
   activeDatasetKey: BUILTIN_DATASETS[0].key,
@@ -88,6 +97,8 @@ function bindElements() {
   els.datasetSummary = document.getElementById("dataset-summary");
   els.chartSummary = document.getElementById("chart-summary");
   els.statusBadge = document.getElementById("status-badge");
+  els.mainChartLegend = document.getElementById("main-chart-legend");
+  els.legendNote = document.getElementById("legend-note");
   els.snapshotCard = document.getElementById("snapshot-card");
   els.statsCard = document.getElementById("stats-card");
   els.logCard = document.getElementById("log-card");
@@ -385,6 +396,7 @@ function renderAll() {
 
   updateStatsCard(view);
   updateSnapshotAndLogCards(view, getHoveredRow(view) || view.filteredRows[0] || null);
+  renderLegend(view);
   renderMainChart(view);
   renderMiniCharts(view);
 }
@@ -756,8 +768,7 @@ function drawIndicatorLines(ctx, indicatorSeries, xScale, yScale, productData) {
   ctx.lineWidth = 1.6;
 
   for (const indicator of indicatorSeries) {
-    const colorKey = indicator.key.startsWith("custom:") ? "midPrice" : indicator.key;
-    ctx.strokeStyle = COLORS[colorKey] || COLORS.midPrice;
+    ctx.strokeStyle = getIndicatorColor(indicator.key);
     ctx.beginPath();
     let started = false;
     for (const point of indicator.values) {
@@ -779,6 +790,60 @@ function drawIndicatorLines(ctx, indicatorSeries, xScale, yScale, productData) {
   }
 
   ctx.restore();
+}
+
+function renderLegend(view) {
+  const items = [];
+  items.push(
+    buildLegendItem(drawLegendDot(COLORS.bid), "Bid quotes", !state.showBids || !view.selectedLevels.length),
+  );
+  items.push(
+    buildLegendItem(drawLegendDot(COLORS.ask), "Ask quotes", !state.showAsks || !view.selectedLevels.length),
+  );
+  items.push(
+    buildLegendItem(drawLegendTriangle(COLORS.tradeBuy, true), "Market buy trade", !state.showMarketTrades),
+  );
+  items.push(
+    buildLegendItem(drawLegendTriangle(COLORS.tradeSell, false), "Market sell trade", !state.showMarketTrades),
+  );
+
+  if (view.visibleTrades.some((trade) => !trade.isOwn && trade.side === "unknown")) {
+    items.push(
+      buildLegendItem(
+        drawLegendSquare(COLORS.tradeBuy),
+        "Unclassified market trade",
+        !state.showMarketTrades,
+      ),
+    );
+  }
+
+  items.push(
+    buildLegendItem(drawLegendCross(COLORS.tradeOwn), "Own trade", !state.showOwnTrades),
+  );
+
+  if (view.indicatorSeries.length) {
+    view.indicatorSeries.forEach((indicator) => {
+      items.push(
+        buildLegendItem(
+          drawLegendLine(getIndicatorColor(indicator.key)),
+          `${indicator.label} line`,
+          false,
+        ),
+      );
+    });
+  }
+
+  els.mainChartLegend.innerHTML = items.join("");
+
+  const normalizationLabel =
+    state.normalization === "none"
+      ? "Prices are shown raw."
+      : `Prices are shown relative to ${describeNormalization(state.normalization)}.`;
+  const levelsLabel = view.selectedLevels.length
+    ? view.selectedLevels.map((level) => `L${level}`).join(", ")
+    : "none";
+
+  els.legendNote.textContent = `${normalizationLabel} Visible book levels: ${levelsLabel}. Quote dot size scales with quoted volume. Trade direction is inferred from price vs. the current book unless the trade matches one of your trader IDs.`;
 }
 
 function drawTrades(ctx, trades, xScale, yScale, productData) {
@@ -838,6 +903,32 @@ function drawSquare(ctx, x, y, size, color) {
   ctx.fillStyle = color;
   ctx.fillRect(x - size / 2, y - size / 2, size, size);
   ctx.restore();
+}
+
+function buildLegendItem(icon, label, hidden) {
+  const hiddenClass = hidden ? " is-hidden" : "";
+  return `<div class="legend-item${hiddenClass}">${icon}<span>${escapeHtml(label)}</span></div>`;
+}
+
+function drawLegendDot(color) {
+  return `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5" fill="${color}"></circle></svg>`;
+}
+
+function drawLegendLine(color) {
+  return `<svg width="22" height="16" viewBox="0 0 22 16" aria-hidden="true"><line x1="1" y1="8" x2="21" y2="8" stroke="${color}" stroke-width="2.5" stroke-linecap="round"></line></svg>`;
+}
+
+function drawLegendTriangle(color, upwards) {
+  const points = upwards ? "8,2 14,14 2,14" : "2,2 14,2 8,14";
+  return `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><polygon points="${points}" fill="${color}"></polygon></svg>`;
+}
+
+function drawLegendCross(color) {
+  return `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><line x1="3" y1="3" x2="13" y2="13" stroke="${color}" stroke-width="2"></line><line x1="3" y1="13" x2="13" y2="3" stroke="${color}" stroke-width="2"></line></svg>`;
+}
+
+function drawLegendSquare(color) {
+  return `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="3" width="10" height="10" fill="${color}"></rect></svg>`;
 }
 
 function renderSeriesChart(canvas, series, color, emptyMessage) {
@@ -1455,6 +1546,39 @@ function formatAxisInteger(value) {
     return `${(value / 1000).toFixed(0)}k`;
   }
   return value.toFixed(0);
+}
+
+function describeNormalization(key) {
+  switch (key) {
+    case "midPrice":
+      return "mid price";
+    case "wallMid":
+      return "wall mid";
+    default:
+      return "raw price";
+  }
+}
+
+function getIndicatorColor(indicatorKey) {
+  if (COLORS[indicatorKey]) {
+    return COLORS[indicatorKey];
+  }
+
+  if (indicatorKey.startsWith("custom:")) {
+    const paletteIndex = Math.abs(hashString(indicatorKey)) % CUSTOM_LINE_PALETTE.length;
+    return CUSTOM_LINE_PALETTE[paletteIndex];
+  }
+
+  return COLORS.midPrice;
+}
+
+function hashString(value) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(index);
+    hash |= 0;
+  }
+  return hash;
 }
 
 function escapeHtml(value) {
