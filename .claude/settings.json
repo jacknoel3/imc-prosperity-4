@@ -3,7 +3,8 @@
     "allow": [
       "Bash(prosperity3bt:*)",
       "Bash(python:*)",
-      "Bash(pip:*)"
+      "Bash(pip:*)",
+      "Bash(git -C /home/lucas_albanese/imc-prosperity-4/imc-prosperity-4 pull origin main)"
     ]
   }
 }
