@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(prosperity3bt:*)",
+      "Bash(python:*)",
+      "Bash(pip:*)"
+    ]
+  }
+}
