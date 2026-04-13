@@ -1,0 +1,1466 @@
+"use strict";
+
+const BUILTIN_DATASETS = [
+  {
+    key: "round0-day--1",
+    label: "Round 0 / Day -1",
+    pricePath: "../data/round0/prices_round_0_day_-1.csv",
+    tradePath: "../data/round0/trades_round_0_day_-1.csv",
+  },
+  {
+    key: "round0-day--2",
+    label: "Round 0 / Day -2",
+    pricePath: "../data/round0/prices_round_0_day_-2.csv",
+    tradePath: "../data/round0/trades_round_0_day_-2.csv",
+  },
+];
+
+const BUILTIN_INDICATORS = [
+  { key: "midPrice", label: "Mid Price" },
+  { key: "wallMid", label: "Wall Mid" },
+  { key: "bestBid", label: "Best Bid" },
+  { key: "bestAsk", label: "Best Ask" },
+  { key: "wallBid", label: "Wall Bid" },
+  { key: "wallAsk", label: "Wall Ask" },
+];
+
+const COLORS = {
+  bid: "rgba(32, 92, 201, 0.58)",
+  ask: "rgba(194, 59, 59, 0.58)",
+  tradeBuy: "rgba(215, 116, 24, 0.85)",
+  tradeSell: "rgba(16, 129, 118, 0.85)",
+  tradeOwn: "rgba(25, 29, 36, 0.92)",
+  grid: "rgba(47, 62, 82, 0.12)",
+  axis: "rgba(41, 55, 71, 0.75)",
+  midPrice: "rgba(47, 62, 82, 0.85)",
+  wallMid: "rgba(204, 114, 44, 0.85)",
+  bestBid: "rgba(32, 92, 201, 0.9)",
+  bestAsk: "rgba(194, 59, 59, 0.9)",
+  wallBid: "rgba(87, 126, 214, 0.95)",
+  wallAsk: "rgba(212, 99, 99, 0.95)",
+  pnl: "rgba(12, 92, 123, 1)",
+  position: "rgba(194, 59, 59, 1)",
+};
+
+const state = {
+  datasets: new Map(),
+  activeDatasetKey: BUILTIN_DATASETS[0].key,
+  selectedProduct: "",
+  normalization: "none",
+  downsample: 1,
+  showBids: true,
+  showAsks: true,
+  showMarketTrades: true,
+  showOwnTrades: true,
+  visibleLevels: { 1: true, 2: true, 3: true },
+  visibleIndicators: new Set(["midPrice", "wallMid"]),
+  hoveredTimestamp: null,
+};
+
+const els = {};
+
+document.addEventListener("DOMContentLoaded", () => {
+  bindElements();
+  bindEvents();
+  populateDatasetSelect();
+  loadDataset(state.activeDatasetKey);
+});
+
+function bindElements() {
+  els.datasetSelect = document.getElementById("dataset-select");
+  els.productSelect = document.getElementById("product-select");
+  els.normalizationSelect = document.getElementById("normalization-select");
+  els.downsampleSelect = document.getElementById("downsample-select");
+  els.timeMinInput = document.getElementById("time-min-input");
+  els.timeMaxInput = document.getElementById("time-max-input");
+  els.tradeMinInput = document.getElementById("trade-min-input");
+  els.tradeMaxInput = document.getElementById("trade-max-input");
+  els.resetRangeButton = document.getElementById("reset-range-button");
+  els.showBidsToggle = document.getElementById("show-bids-toggle");
+  els.showAsksToggle = document.getElementById("show-asks-toggle");
+  els.showMarketTradesToggle = document.getElementById("show-market-trades-toggle");
+  els.showOwnTradesToggle = document.getElementById("show-own-trades-toggle");
+  els.level1Toggle = document.getElementById("level-1-toggle");
+  els.level2Toggle = document.getElementById("level-2-toggle");
+  els.level3Toggle = document.getElementById("level-3-toggle");
+  els.indicatorToggles = document.getElementById("indicator-toggles");
+  els.ownTraderIdsInput = document.getElementById("own-trader-ids-input");
+  els.datasetSummary = document.getElementById("dataset-summary");
+  els.chartSummary = document.getElementById("chart-summary");
+  els.statusBadge = document.getElementById("status-badge");
+  els.snapshotCard = document.getElementById("snapshot-card");
+  els.statsCard = document.getElementById("stats-card");
+  els.logCard = document.getElementById("log-card");
+  els.pnlNote = document.getElementById("pnl-note");
+  els.positionNote = document.getElementById("position-note");
+  els.mainChartWrapper = document.getElementById("main-chart-wrapper");
+  els.mainChart = document.getElementById("main-chart");
+  els.pnlChart = document.getElementById("pnl-chart");
+  els.positionChart = document.getElementById("position-chart");
+  els.mainTooltip = document.getElementById("main-tooltip");
+  els.uploadPriceInput = document.getElementById("upload-price-input");
+  els.uploadTradeInput = document.getElementById("upload-trade-input");
+  els.uploadIndicatorInput = document.getElementById("upload-indicator-input");
+  els.uploadLogInput = document.getElementById("upload-log-input");
+  els.loadUploadedButton = document.getElementById("load-uploaded-button");
+}
+
+function bindEvents() {
+  els.datasetSelect.addEventListener("change", async (event) => {
+    state.activeDatasetKey = event.target.value;
+    state.hoveredTimestamp = null;
+    await loadDataset(state.activeDatasetKey);
+  });
+
+  els.productSelect.addEventListener("change", (event) => {
+    state.selectedProduct = event.target.value;
+    state.hoveredTimestamp = null;
+    initializeTimeRange();
+    renderIndicatorToggles();
+    renderAll();
+  });
+
+  els.normalizationSelect.addEventListener("change", (event) => {
+    state.normalization = event.target.value;
+    renderAll();
+  });
+
+  els.downsampleSelect.addEventListener("change", (event) => {
+    state.downsample = clampNumber(toNumber(event.target.value), 1, 100) || 1;
+    renderAll();
+  });
+
+  [els.timeMinInput, els.timeMaxInput, els.tradeMinInput, els.tradeMaxInput].forEach(
+    (input) => input.addEventListener("change", () => renderAll()),
+  );
+
+  els.resetRangeButton.addEventListener("click", () => {
+    initializeTimeRange();
+    renderAll();
+  });
+
+  els.showBidsToggle.addEventListener("change", (event) => {
+    state.showBids = event.target.checked;
+    renderAll();
+  });
+
+  els.showAsksToggle.addEventListener("change", (event) => {
+    state.showAsks = event.target.checked;
+    renderAll();
+  });
+
+  els.showMarketTradesToggle.addEventListener("change", (event) => {
+    state.showMarketTrades = event.target.checked;
+    renderAll();
+  });
+
+  els.showOwnTradesToggle.addEventListener("change", (event) => {
+    state.showOwnTrades = event.target.checked;
+    renderAll();
+  });
+
+  els.level1Toggle.addEventListener("change", (event) => {
+    state.visibleLevels[1] = event.target.checked;
+    renderAll();
+  });
+
+  els.level2Toggle.addEventListener("change", (event) => {
+    state.visibleLevels[2] = event.target.checked;
+    renderAll();
+  });
+
+  els.level3Toggle.addEventListener("change", (event) => {
+    state.visibleLevels[3] = event.target.checked;
+    renderAll();
+  });
+
+  els.ownTraderIdsInput.addEventListener("change", () => renderAll());
+  els.ownTraderIdsInput.addEventListener("keyup", () => renderAll());
+
+  els.loadUploadedButton.addEventListener("click", () => loadUploadedDataset());
+
+  els.mainChartWrapper.addEventListener("mousemove", handleChartHover);
+  els.mainChartWrapper.addEventListener("mouseleave", () => {
+    state.hoveredTimestamp = null;
+    els.mainTooltip.classList.add("hidden");
+    renderAll();
+  });
+
+  window.addEventListener("resize", () => renderAll());
+}
+
+async function loadDataset(key) {
+  try {
+    setStatus("Loading dataset...");
+    const dataset = await ensureDatasetLoaded(key);
+    if (!dataset) {
+      throw new Error("Dataset definition not found.");
+    }
+
+    if (!dataset.products.size) {
+      throw new Error("Dataset contains no products.");
+    }
+
+    state.selectedProduct = dataset.products.has(state.selectedProduct)
+      ? state.selectedProduct
+      : [...dataset.products.keys()][0];
+
+    populateProductSelect(dataset);
+    initializeTimeRange();
+    renderIndicatorToggles();
+    renderAll();
+    setStatus(`Loaded ${dataset.label}`);
+  } catch (error) {
+    console.error(error);
+    setStatus(`Failed to load dataset: ${error.message}`);
+  }
+}
+
+async function ensureDatasetLoaded(key) {
+  if (state.datasets.has(key)) {
+    return state.datasets.get(key);
+  }
+
+  if (key === "uploaded") {
+    return state.datasets.get(key) || null;
+  }
+
+  const definition = BUILTIN_DATASETS.find((item) => item.key === key);
+  if (!definition) {
+    return null;
+  }
+
+  const [priceText, tradeText] = await Promise.all([
+    fetchText(definition.pricePath),
+    fetchText(definition.tradePath),
+  ]);
+
+  const dataset = buildDataset({
+    key: definition.key,
+    label: definition.label,
+    priceRowsRaw: parseDelimitedText(priceText),
+    tradeRowsRaw: parseDelimitedText(tradeText),
+    indicatorRowsRaw: [],
+    logRowsRaw: [],
+  });
+
+  state.datasets.set(definition.key, dataset);
+  return dataset;
+}
+
+async function loadUploadedDataset() {
+  const priceFile = els.uploadPriceInput.files[0];
+  if (!priceFile) {
+    setStatus("Choose a price CSV before loading uploaded files.");
+    return;
+  }
+
+  try {
+    setStatus("Parsing uploaded files...");
+
+    const [priceText, tradeText, indicatorText, logText] = await Promise.all([
+      priceFile.text(),
+      readOptionalFile(els.uploadTradeInput.files[0]),
+      readOptionalFile(els.uploadIndicatorInput.files[0]),
+      readOptionalFile(els.uploadLogInput.files[0]),
+    ]);
+
+    const dataset = buildDataset({
+      key: "uploaded",
+      label: `Uploaded / ${priceFile.name}`,
+      priceRowsRaw: parseDelimitedText(priceText),
+      tradeRowsRaw: tradeText ? parseDelimitedText(tradeText) : [],
+      indicatorRowsRaw: indicatorText ? parseIndicatorText(indicatorText) : [],
+      logRowsRaw: logText ? parseLogText(logText) : [],
+    });
+
+    state.datasets.set("uploaded", dataset);
+    populateDatasetSelect();
+    els.datasetSelect.value = "uploaded";
+    state.activeDatasetKey = "uploaded";
+    state.selectedProduct = [...dataset.products.keys()][0] || "";
+    populateProductSelect(dataset);
+    initializeTimeRange();
+    renderIndicatorToggles();
+    renderAll();
+    setStatus(`Loaded uploaded dataset: ${priceFile.name}`);
+  } catch (error) {
+    console.error(error);
+    setStatus(`Could not parse uploaded files: ${error.message}`);
+  }
+}
+
+function populateDatasetSelect() {
+  const options = [...BUILTIN_DATASETS];
+  if (state.datasets.has("uploaded")) {
+    const uploaded = state.datasets.get("uploaded");
+    options.push({ key: "uploaded", label: uploaded.label });
+  }
+
+  els.datasetSelect.innerHTML = options
+    .map((option) => `<option value="${escapeHtml(option.key)}">${escapeHtml(option.label)}</option>`)
+    .join("");
+
+  els.datasetSelect.value = state.activeDatasetKey;
+}
+
+function populateProductSelect(dataset) {
+  const products = [...dataset.products.keys()];
+  els.productSelect.innerHTML = products
+    .map((product) => `<option value="${escapeHtml(product)}">${escapeHtml(product)}</option>`)
+    .join("");
+
+  els.productSelect.value = state.selectedProduct;
+}
+
+function initializeTimeRange() {
+  const productData = getActiveProductData();
+  if (!productData || !productData.rows.length) {
+    return;
+  }
+
+  const firstTimestamp = productData.rows[0].timestamp;
+  const lastTimestamp = productData.rows[productData.rows.length - 1].timestamp;
+  els.timeMinInput.value = String(firstTimestamp);
+  els.timeMaxInput.value = String(lastTimestamp);
+}
+
+function renderIndicatorToggles() {
+  const productData = getActiveProductData();
+  if (!productData) {
+    els.indicatorToggles.innerHTML = "";
+    return;
+  }
+
+  const customKeys = [...productData.indicatorsByName.keys()].map((name) => ({
+    key: `custom:${name}`,
+    label: name,
+  }));
+
+  const items = [...BUILTIN_INDICATORS, ...customKeys];
+  els.indicatorToggles.innerHTML = items
+    .map((item) => {
+      const checked = state.visibleIndicators.has(item.key) ? "checked" : "";
+      return `
+        <label class="toggle-pill">
+          <input type="checkbox" data-indicator-key="${escapeHtml(item.key)}" ${checked} />
+          <span>${escapeHtml(item.label)}</span>
+        </label>
+      `;
+    })
+    .join("");
+
+  els.indicatorToggles.querySelectorAll("input[type='checkbox']").forEach((input) => {
+    input.addEventListener("change", (event) => {
+      const key = event.target.getAttribute("data-indicator-key");
+      if (!key) {
+        return;
+      }
+
+      if (event.target.checked) {
+        state.visibleIndicators.add(key);
+      } else {
+        state.visibleIndicators.delete(key);
+      }
+      renderAll();
+    });
+  });
+}
+
+function renderAll() {
+  const dataset = getActiveDataset();
+  const productData = getActiveProductData();
+
+  if (!dataset || !productData) {
+    return;
+  }
+
+  const view = buildView(dataset, productData);
+  els.datasetSummary.textContent = `${formatInteger(dataset.priceRows.length)} book rows, ${formatInteger(
+    dataset.tradeRows.length,
+  )} trades, ${dataset.products.size} products`;
+  els.chartSummary.textContent = `${formatInteger(view.filteredRows.length)} snapshots in view, ${formatInteger(
+    view.visibleTrades.length,
+  )} trades shown`;
+
+  updateStatsCard(view);
+  updateSnapshotAndLogCards(view, getHoveredRow(view) || view.filteredRows[0] || null);
+  renderMainChart(view);
+  renderMiniCharts(view);
+}
+
+function buildView(dataset, productData) {
+  const fullMin = productData.rows[0]?.timestamp ?? 0;
+  const fullMax = productData.rows[productData.rows.length - 1]?.timestamp ?? 0;
+  let rangeMin = toNumber(els.timeMinInput.value);
+  let rangeMax = toNumber(els.timeMaxInput.value);
+  rangeMin = rangeMin == null ? fullMin : clampNumber(rangeMin, fullMin, fullMax);
+  rangeMax = rangeMax == null ? fullMax : clampNumber(rangeMax, fullMin, fullMax);
+
+  if (rangeMin > rangeMax) {
+    [rangeMin, rangeMax] = [rangeMax, rangeMin];
+  }
+
+  const selectedLevels = Object.entries(state.visibleLevels)
+    .filter(([, visible]) => visible)
+    .map(([level]) => Number(level));
+
+  const rawRows = productData.rows.filter(
+    (row) => row.timestamp >= rangeMin && row.timestamp <= rangeMax,
+  );
+  const filteredRows = rawRows.filter((_, index) => index % state.downsample === 0);
+  const tradeMin = Math.max(0, toNumber(els.tradeMinInput.value) ?? 0);
+  const tradeMax = Math.max(tradeMin, toNumber(els.tradeMaxInput.value) ?? 999999);
+
+  const ownIds = getOwnTraderIds();
+  const visibleTrades = productData.trades
+    .filter((trade) => trade.timestamp >= rangeMin && trade.timestamp <= rangeMax)
+    .map((trade) => decorateTrade(trade, productData.rowByTimestamp.get(trade.timestamp), ownIds))
+    .filter((trade) => trade.quantity >= tradeMin && trade.quantity <= tradeMax)
+    .filter((trade) => {
+      if (trade.isOwn) {
+        return state.showOwnTrades;
+      }
+      return state.showMarketTrades;
+    });
+
+  const yValues = [];
+  const indicatorSeries = [];
+
+  for (const indicatorKey of state.visibleIndicators) {
+    const series = buildIndicatorSeries(productData, filteredRows, indicatorKey);
+    if (series.length) {
+      indicatorSeries.push({
+        key: indicatorKey,
+        label: indicatorKey.startsWith("custom:")
+          ? indicatorKey.slice(7)
+          : BUILTIN_INDICATORS.find((item) => item.key === indicatorKey)?.label || indicatorKey,
+        values: series,
+      });
+      for (const point of series) {
+        const row = productData.rowByTimestamp.get(point.timestamp);
+        if (row) {
+          yValues.push(normalizePrice(row, point.value));
+        }
+      }
+    }
+  }
+
+  for (const row of filteredRows) {
+    if (state.showBids) {
+      row.bids
+        .filter((level) => selectedLevels.includes(level.level))
+        .forEach((level) => yValues.push(normalizePrice(row, level.price)));
+    }
+    if (state.showAsks) {
+      row.asks
+        .filter((level) => selectedLevels.includes(level.level))
+        .forEach((level) => yValues.push(normalizePrice(row, level.price)));
+    }
+  }
+
+  visibleTrades.forEach((trade) => {
+    const row = productData.rowByTimestamp.get(trade.timestamp);
+    if (row) {
+      yValues.push(normalizePrice(row, trade.price));
+    }
+  });
+
+  if (!yValues.length) {
+    filteredRows.forEach((row) => yValues.push(normalizePrice(row, row.midPrice)));
+  }
+
+  let yMin = Math.min(...yValues);
+  let yMax = Math.max(...yValues);
+  if (yMin === yMax) {
+    yMin -= 1;
+    yMax += 1;
+  }
+
+  const padding = Math.max((yMax - yMin) * 0.08, 1);
+  yMin -= padding;
+  yMax += padding;
+
+  return {
+    dataset,
+    productData,
+    fullMin,
+    fullMax,
+    rangeMin,
+    rangeMax,
+    filteredRows,
+    visibleTrades,
+    selectedLevels,
+    indicatorSeries,
+    yMin,
+    yMax,
+  };
+}
+
+function renderMainChart(view = buildView(getActiveDataset(), getActiveProductData())) {
+  const prepared = prepareCanvas(els.mainChart);
+  const ctx = prepared.ctx;
+  const width = prepared.width;
+  const height = prepared.height;
+  const plot = { left: 66, top: 20, right: width - 24, bottom: height - 38 };
+
+  ctx.clearRect(0, 0, width, height);
+  drawGridAndAxes(ctx, plot, view.rangeMin, view.rangeMax, view.yMin, view.yMax);
+
+  const xScale = (timestamp) => scale(timestamp, view.rangeMin, view.rangeMax, plot.left, plot.right);
+  const yScale = (price) => scale(price, view.yMin, view.yMax, plot.bottom, plot.top);
+
+  if (state.showBids) {
+    drawBookPoints(ctx, view.filteredRows, plot, xScale, yScale, "bids", view.selectedLevels, COLORS.bid);
+  }
+
+  if (state.showAsks) {
+    drawBookPoints(ctx, view.filteredRows, plot, xScale, yScale, "asks", view.selectedLevels, COLORS.ask);
+  }
+
+  drawIndicatorLines(ctx, view.indicatorSeries, xScale, yScale, view.productData);
+  drawTrades(ctx, view.visibleTrades, xScale, yScale, view.productData);
+
+  const hoveredRow = getHoveredRow(view);
+  if (hoveredRow) {
+    const x = xScale(hoveredRow.timestamp);
+    ctx.save();
+    ctx.strokeStyle = "rgba(25, 29, 36, 0.48)";
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    ctx.moveTo(x, plot.top);
+    ctx.lineTo(x, plot.bottom);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function renderMiniCharts(view) {
+  const pnlSeries = buildPnlSeries(view.productData);
+  const positionSeries = buildPositionSeries(view.productData);
+
+  renderSeriesChart(
+    els.pnlChart,
+    pnlSeries,
+    COLORS.pnl,
+    "No backtest PnL available yet. Load your own backtest export or own trades to populate this panel.",
+  );
+
+  renderSeriesChart(
+    els.positionChart,
+    positionSeries,
+    COLORS.position,
+    "No own trades detected yet. Set your trader ID or load a trade export with buyer and seller IDs.",
+  );
+
+  if (pnlSeries.length) {
+    els.pnlNote.textContent = `${formatInteger(pnlSeries.length)} points`;
+  } else {
+    els.pnlNote.textContent = "Waiting for strategy data";
+  }
+
+  if (positionSeries.length) {
+    els.positionNote.textContent = `${formatInteger(positionSeries.length)} points`;
+  } else {
+    els.positionNote.textContent = "Waiting for own trades";
+  }
+}
+
+function updateStatsCard(view) {
+  const spreads = view.filteredRows
+    .map((row) => row.spread)
+    .filter((value) => Number.isFinite(value));
+
+  const mids = view.filteredRows
+    .map((row) => row.midPrice)
+    .filter((value) => Number.isFinite(value));
+
+  const avgSpread = spreads.length ? spreads.reduce((sum, value) => sum + value, 0) / spreads.length : null;
+  const minMid = mids.length ? Math.min(...mids) : null;
+  const maxMid = mids.length ? Math.max(...mids) : null;
+
+  const lines = [
+    `dataset: ${view.dataset.label}`,
+    `product: ${state.selectedProduct}`,
+    `range: ${formatInteger(view.rangeMin)} -> ${formatInteger(view.rangeMax)}`,
+    `rows in view: ${formatInteger(view.filteredRows.length)}`,
+    `trades shown: ${formatInteger(view.visibleTrades.length)}`,
+    `avg spread: ${formatMaybe(avgSpread)}`,
+    `mid range: ${formatMaybe(minMid)} -> ${formatMaybe(maxMid)}`,
+    `normalization: ${state.normalization}`,
+    `downsample: ${state.downsample}x`,
+  ];
+
+  els.statsCard.textContent = lines.join("\n");
+}
+
+function updateSnapshotAndLogCards(view, row) {
+  if (!row) {
+    els.snapshotCard.textContent = "No row selected.";
+    els.logCard.textContent = "No logs loaded.";
+    return;
+  }
+
+  const trades = view.visibleTrades
+    .filter((trade) => trade.timestamp === row.timestamp)
+    .slice(0, 8);
+
+  const snapshotLines = [
+    `timestamp: ${formatInteger(row.timestamp)}`,
+    `mid: ${formatMaybe(row.midPrice)}`,
+    `wall mid: ${formatMaybe(row.wallMid)}`,
+    `spread: ${formatMaybe(row.spread)}`,
+    "",
+    "bids:",
+    ...formatBookSide(row.bids),
+    "",
+    "asks:",
+    ...formatBookSide(row.asks),
+  ];
+
+  if (trades.length) {
+    snapshotLines.push("", "trades:");
+    trades.forEach((trade) => {
+      const label = trade.isOwn ? "own" : trade.side;
+      snapshotLines.push(`- ${label} ${trade.quantity} @ ${formatMaybe(trade.price)}`);
+    });
+  }
+
+  els.snapshotCard.textContent = snapshotLines.join("\n");
+
+  const logs = view.productData.logsByTimestamp.get(row.timestamp) || [];
+  if (!logs.length) {
+    els.logCard.textContent =
+      "No logs at this timestamp.\n\nLoad a log file with timestamp, product, message to sync your notes with the chart.";
+    return;
+  }
+
+  els.logCard.textContent = logs.map((log) => `- ${log.message}`).join("\n");
+}
+
+function handleChartHover(event) {
+  const view = buildView(getActiveDataset(), getActiveProductData());
+  if (!view.filteredRows.length) {
+    return;
+  }
+
+  const rect = els.mainChart.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const width = rect.width;
+  const plotLeft = 66;
+  const plotRight = width - 24;
+
+  if (x < plotLeft || x > plotRight) {
+    state.hoveredTimestamp = null;
+    els.mainTooltip.classList.add("hidden");
+    updateSnapshotAndLogCards(view, view.filteredRows[0] || null);
+    renderMainChart(view);
+    return;
+  }
+
+  const timestamp = scale(x, plotLeft, plotRight, view.rangeMin, view.rangeMax);
+  const row = findNearestRow(view.filteredRows, timestamp);
+  if (!row) {
+    return;
+  }
+
+  state.hoveredTimestamp = row.timestamp;
+  updateSnapshotAndLogCards(view, row);
+  renderMainChart(view);
+  showTooltip(event, view, row);
+}
+
+function showTooltip(event, view, row) {
+  const trades = view.visibleTrades.filter((trade) => trade.timestamp === row.timestamp);
+  const lines = [
+    `t=${formatInteger(row.timestamp)}`,
+    `mid=${formatMaybe(row.midPrice)} wall=${formatMaybe(row.wallMid)}`,
+    `spread=${formatMaybe(row.spread)}`,
+  ];
+
+  if (trades.length) {
+    lines.push(`trades=${trades.length}`);
+    trades.slice(0, 5).forEach((trade) => {
+      const marker = trade.isOwn ? "own" : trade.side;
+      lines.push(`${marker}: ${trade.quantity} @ ${formatMaybe(trade.price)}`);
+    });
+  }
+
+  els.mainTooltip.textContent = lines.join("\n");
+  els.mainTooltip.classList.remove("hidden");
+
+  const wrapperRect = els.mainChartWrapper.getBoundingClientRect();
+  const maxLeft = Math.max(10, wrapperRect.width - 250);
+  const maxTop = Math.max(10, wrapperRect.height - 120);
+  const left = clampNumber(event.clientX - wrapperRect.left + 10, 10, maxLeft);
+  const top = clampNumber(event.clientY - wrapperRect.top + 10, 10, maxTop);
+  els.mainTooltip.style.left = `${left}px`;
+  els.mainTooltip.style.top = `${top}px`;
+}
+
+function drawGridAndAxes(ctx, plot, xMin, xMax, yMin, yMax) {
+  ctx.save();
+  ctx.strokeStyle = COLORS.grid;
+  ctx.lineWidth = 1;
+  ctx.fillStyle = COLORS.axis;
+  ctx.font = "12px Menlo, Consolas, monospace";
+
+  const yTicks = 6;
+  for (let index = 0; index <= yTicks; index += 1) {
+    const ratio = index / yTicks;
+    const y = plot.top + ratio * (plot.bottom - plot.top);
+    const value = yMax - ratio * (yMax - yMin);
+    ctx.beginPath();
+    ctx.moveTo(plot.left, y);
+    ctx.lineTo(plot.right, y);
+    ctx.stroke();
+    ctx.fillText(formatAxisValue(value), 10, y + 4);
+  }
+
+  const xTicks = 6;
+  for (let index = 0; index <= xTicks; index += 1) {
+    const ratio = index / xTicks;
+    const x = plot.left + ratio * (plot.right - plot.left);
+    const value = xMin + ratio * (xMax - xMin);
+    ctx.beginPath();
+    ctx.moveTo(x, plot.top);
+    ctx.lineTo(x, plot.bottom);
+    ctx.stroke();
+    ctx.fillText(formatAxisInteger(value), x - 18, plot.bottom + 22);
+  }
+
+  ctx.restore();
+}
+
+function drawBookPoints(ctx, rows, plot, xScale, yScale, sideKey, selectedLevels, color) {
+  ctx.save();
+  ctx.fillStyle = color;
+
+  for (const row of rows) {
+    const x = xScale(row.timestamp);
+    const levels = row[sideKey].filter((level) => selectedLevels.includes(level.level));
+    for (const level of levels) {
+      const y = yScale(normalizePrice(row, level.price));
+      const radius = 1.5 + Math.sqrt(Math.max(level.volume, 1)) * 0.7;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  ctx.restore();
+}
+
+function drawIndicatorLines(ctx, indicatorSeries, xScale, yScale, productData) {
+  ctx.save();
+  ctx.lineWidth = 1.6;
+
+  for (const indicator of indicatorSeries) {
+    const colorKey = indicator.key.startsWith("custom:") ? "midPrice" : indicator.key;
+    ctx.strokeStyle = COLORS[colorKey] || COLORS.midPrice;
+    ctx.beginPath();
+    let started = false;
+    for (const point of indicator.values) {
+      const row = productData.rowByTimestamp.get(point.timestamp);
+      if (!row) {
+        continue;
+      }
+
+      const x = xScale(point.timestamp);
+      const y = yScale(normalizePrice(row, point.value));
+      if (!started) {
+        ctx.moveTo(x, y);
+        started = true;
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawTrades(ctx, trades, xScale, yScale, productData) {
+  for (const trade of trades) {
+    const row = productData.rowByTimestamp.get(trade.timestamp);
+    if (!row) {
+      continue;
+    }
+
+    const x = xScale(trade.timestamp);
+    const y = yScale(normalizePrice(row, trade.price));
+    if (trade.isOwn) {
+      drawCross(ctx, x, y, 6, COLORS.tradeOwn);
+    } else if (trade.side === "buy") {
+      drawTriangle(ctx, x, y, 7, COLORS.tradeBuy, true);
+    } else if (trade.side === "sell") {
+      drawTriangle(ctx, x, y, 7, COLORS.tradeSell, false);
+    } else {
+      drawSquare(ctx, x, y, 6, COLORS.tradeBuy);
+    }
+  }
+}
+
+function drawCross(ctx, x, y, size, color) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(x - size, y - size);
+  ctx.lineTo(x + size, y + size);
+  ctx.moveTo(x - size, y + size);
+  ctx.lineTo(x + size, y - size);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawTriangle(ctx, x, y, size, color, upwards) {
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  if (upwards) {
+    ctx.moveTo(x, y - size);
+    ctx.lineTo(x + size, y + size);
+    ctx.lineTo(x - size, y + size);
+  } else {
+    ctx.moveTo(x, y + size);
+    ctx.lineTo(x + size, y - size);
+    ctx.lineTo(x - size, y - size);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawSquare(ctx, x, y, size, color) {
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.fillRect(x - size / 2, y - size / 2, size, size);
+  ctx.restore();
+}
+
+function renderSeriesChart(canvas, series, color, emptyMessage) {
+  const prepared = prepareCanvas(canvas);
+  const ctx = prepared.ctx;
+  const width = prepared.width;
+  const height = prepared.height;
+  const plot = { left: 62, top: 20, right: width - 24, bottom: height - 36 };
+
+  ctx.clearRect(0, 0, width, height);
+
+  if (!series.length) {
+    ctx.fillStyle = COLORS.axis;
+    ctx.font = "13px Menlo, Consolas, monospace";
+    ctx.fillText(emptyMessage, 18, height / 2);
+    return;
+  }
+
+  const xMin = series[0].timestamp;
+  const xMax = series[series.length - 1].timestamp;
+  const values = series.map((point) => point.value);
+  let yMin = Math.min(...values);
+  let yMax = Math.max(...values);
+  if (yMin === yMax) {
+    yMin -= 1;
+    yMax += 1;
+  }
+
+  const yPadding = Math.max((yMax - yMin) * 0.1, 1);
+  yMin -= yPadding;
+  yMax += yPadding;
+
+  drawGridAndAxes(ctx, plot, xMin, xMax, yMin, yMax);
+
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  series.forEach((point, index) => {
+    const x = scale(point.timestamp, xMin, xMax, plot.left, plot.right);
+    const y = scale(point.value, yMin, yMax, plot.bottom, plot.top);
+    if (index === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  });
+  ctx.stroke();
+  ctx.restore();
+}
+
+function buildPnlSeries(productData) {
+  if (!productData) {
+    return [];
+  }
+
+  const hasNonZeroPnl = productData.rows.some((row) => Math.abs(row.pnl) > 1e-9);
+  if (hasNonZeroPnl) {
+    return productData.rows.map((row) => ({ timestamp: row.timestamp, value: row.pnl }));
+  }
+
+  const ownTrades = productData.trades
+    .map((trade) => decorateTrade(trade, productData.rowByTimestamp.get(trade.timestamp), getOwnTraderIds()))
+    .filter((trade) => trade.isOwn)
+    .sort((left, right) => left.timestamp - right.timestamp);
+
+  if (!ownTrades.length) {
+    return [];
+  }
+
+  const tradesByTimestamp = groupBy(ownTrades, (trade) => trade.timestamp);
+  const series = [];
+  let cash = 0;
+  let position = 0;
+
+  for (const row of productData.rows) {
+    const trades = tradesByTimestamp.get(row.timestamp) || [];
+    trades.forEach((trade) => {
+      if (trade.side === "buy") {
+        position += trade.quantity;
+        cash -= trade.quantity * trade.price;
+      } else if (trade.side === "sell") {
+        position -= trade.quantity;
+        cash += trade.quantity * trade.price;
+      }
+    });
+
+    series.push({
+      timestamp: row.timestamp,
+      value: cash + position * row.midPrice,
+    });
+  }
+
+  return series;
+}
+
+function buildPositionSeries(productData) {
+  if (!productData) {
+    return [];
+  }
+
+  const ownTrades = productData.trades
+    .map((trade) => decorateTrade(trade, productData.rowByTimestamp.get(trade.timestamp), getOwnTraderIds()))
+    .filter((trade) => trade.isOwn)
+    .sort((left, right) => left.timestamp - right.timestamp);
+
+  if (!ownTrades.length) {
+    return [];
+  }
+
+  const tradesByTimestamp = groupBy(ownTrades, (trade) => trade.timestamp);
+  const series = [];
+  let position = 0;
+
+  for (const row of productData.rows) {
+    const trades = tradesByTimestamp.get(row.timestamp) || [];
+    trades.forEach((trade) => {
+      if (trade.side === "buy") {
+        position += trade.quantity;
+      } else if (trade.side === "sell") {
+        position -= trade.quantity;
+      }
+    });
+
+    series.push({
+      timestamp: row.timestamp,
+      value: position,
+    });
+  }
+
+  return series;
+}
+
+function buildIndicatorSeries(productData, filteredRows, indicatorKey) {
+  if (indicatorKey.startsWith("custom:")) {
+    const name = indicatorKey.slice(7);
+    const values = productData.indicatorsByName.get(name) || [];
+    return values
+      .filter((item) => item.timestamp >= filteredRows[0]?.timestamp && item.timestamp <= filteredRows[filteredRows.length - 1]?.timestamp)
+      .map((item) => ({ timestamp: item.timestamp, value: item.value }));
+  }
+
+  return filteredRows
+    .map((row) => {
+      const value = getRowIndicatorValue(row, indicatorKey);
+      if (!Number.isFinite(value)) {
+        return null;
+      }
+
+      return { timestamp: row.timestamp, value };
+    })
+    .filter(Boolean);
+}
+
+function getRowIndicatorValue(row, indicatorKey) {
+  switch (indicatorKey) {
+    case "midPrice":
+      return row.midPrice;
+    case "wallMid":
+      return row.wallMid;
+    case "bestBid":
+      return row.bestBid;
+    case "bestAsk":
+      return row.bestAsk;
+    case "wallBid":
+      return row.wallBid;
+    case "wallAsk":
+      return row.wallAsk;
+    default:
+      return NaN;
+  }
+}
+
+function buildDataset({ key, label, priceRowsRaw, tradeRowsRaw, indicatorRowsRaw, logRowsRaw }) {
+  const priceRows = priceRowsRaw
+    .map((row) => normalizePriceRow(row))
+    .filter((row) => row.product && Number.isFinite(row.timestamp))
+    .sort((left, right) => {
+      if (left.product === right.product) {
+        return left.timestamp - right.timestamp;
+      }
+      return left.product.localeCompare(right.product);
+    });
+
+  const tradeRows = tradeRowsRaw
+    .map((row) => normalizeTradeRow(row))
+    .filter((row) => row.symbol && Number.isFinite(row.timestamp) && Number.isFinite(row.price))
+    .sort((left, right) => left.timestamp - right.timestamp);
+
+  const indicatorRows = indicatorRowsRaw
+    .map((row) => normalizeIndicatorRow(row))
+    .filter((row) => row.product && row.name && Number.isFinite(row.timestamp) && Number.isFinite(row.value));
+
+  const logRows = logRowsRaw
+    .map((row) => normalizeLogRow(row))
+    .filter((row) => row.product && Number.isFinite(row.timestamp) && row.message);
+
+  const products = new Map();
+
+  for (const row of priceRows) {
+    if (!products.has(row.product)) {
+      products.set(row.product, {
+        rows: [],
+        rowByTimestamp: new Map(),
+        trades: [],
+        indicatorsByName: new Map(),
+        logsByTimestamp: new Map(),
+      });
+    }
+
+    const product = products.get(row.product);
+    product.rows.push(row);
+    product.rowByTimestamp.set(row.timestamp, row);
+  }
+
+  for (const trade of tradeRows) {
+    const product = products.get(trade.symbol);
+    if (product) {
+      product.trades.push(trade);
+    }
+  }
+
+  for (const indicator of indicatorRows) {
+    const product = products.get(indicator.product);
+    if (!product) {
+      continue;
+    }
+
+    if (!product.indicatorsByName.has(indicator.name)) {
+      product.indicatorsByName.set(indicator.name, []);
+    }
+
+    product.indicatorsByName.get(indicator.name).push(indicator);
+  }
+
+  for (const logRow of logRows) {
+    const product = products.get(logRow.product);
+    if (!product) {
+      continue;
+    }
+
+    if (!product.logsByTimestamp.has(logRow.timestamp)) {
+      product.logsByTimestamp.set(logRow.timestamp, []);
+    }
+    product.logsByTimestamp.get(logRow.timestamp).push(logRow);
+  }
+
+  products.forEach((product) => {
+    product.trades.sort((left, right) => left.timestamp - right.timestamp);
+    product.indicatorsByName.forEach((series) => series.sort((left, right) => left.timestamp - right.timestamp));
+  });
+
+  return { key, label, priceRows, tradeRows, indicatorRows, logRows, products };
+}
+
+function normalizePriceRow(row) {
+  const bids = [];
+  const asks = [];
+  for (let level = 1; level <= 3; level += 1) {
+    const bidPrice = toNumber(row[`bid_price_${level}`]);
+    const bidVolume = toNumber(row[`bid_volume_${level}`]);
+    const askPrice = toNumber(row[`ask_price_${level}`]);
+    const askVolume = toNumber(row[`ask_volume_${level}`]);
+
+    if (Number.isFinite(bidPrice) && Number.isFinite(bidVolume)) {
+      bids.push({ level, price: bidPrice, volume: Math.abs(bidVolume) });
+    }
+
+    if (Number.isFinite(askPrice) && Number.isFinite(askVolume)) {
+      asks.push({ level, price: askPrice, volume: Math.abs(askVolume) });
+    }
+  }
+
+  const bestBid = bids[0]?.price ?? NaN;
+  const bestAsk = asks[0]?.price ?? NaN;
+  const wallBid = bids.length
+    ? bids.reduce((best, level) => (level.volume > best.volume ? level : best)).price
+    : bestBid;
+  const wallAsk = asks.length
+    ? asks.reduce((best, level) => (level.volume > best.volume ? level : best)).price
+    : bestAsk;
+  const spread =
+    Number.isFinite(bestBid) && Number.isFinite(bestAsk) ? bestAsk - bestBid : NaN;
+  const midPrice =
+    toNumber(row.mid_price) ??
+    (Number.isFinite(bestBid) && Number.isFinite(bestAsk) ? (bestBid + bestAsk) / 2 : NaN);
+  const wallMid =
+    Number.isFinite(wallBid) && Number.isFinite(wallAsk) ? (wallBid + wallAsk) / 2 : midPrice;
+
+  return {
+    day: toNumber(row.day),
+    timestamp: toNumber(row.timestamp),
+    product: String(row.product || row.symbol || "").trim(),
+    bids,
+    asks,
+    bestBid,
+    bestAsk,
+    wallBid,
+    wallAsk,
+    midPrice,
+    wallMid,
+    spread,
+    pnl: toNumber(row.profit_and_loss) ?? 0,
+  };
+}
+
+function normalizeTradeRow(row) {
+  return {
+    timestamp: toNumber(row.timestamp),
+    buyer: String(row.buyer || "").trim(),
+    seller: String(row.seller || "").trim(),
+    symbol: String(row.symbol || row.product || "").trim(),
+    currency: String(row.currency || "").trim(),
+    price: toNumber(row.price),
+    quantity: Math.abs(toNumber(row.quantity) ?? 0),
+  };
+}
+
+function normalizeIndicatorRow(row) {
+  return {
+    timestamp: toNumber(row.timestamp),
+    product: String(row.product || row.symbol || "").trim(),
+    name: String(row.name || row.indicator || "").trim(),
+    value: toNumber(row.value),
+  };
+}
+
+function normalizeLogRow(row) {
+  return {
+    timestamp: toNumber(row.timestamp),
+    product: String(row.product || row.symbol || "").trim(),
+    message: String(row.message || row.text || row.log || "").trim(),
+  };
+}
+
+function decorateTrade(trade, bookRow, ownIds) {
+  const normalizedBuyer = normalizeId(trade.buyer);
+  const normalizedSeller = normalizeId(trade.seller);
+
+  if (ownIds.has(normalizedBuyer)) {
+    return { ...trade, isOwn: true, side: "buy" };
+  }
+
+  if (ownIds.has(normalizedSeller)) {
+    return { ...trade, isOwn: true, side: "sell" };
+  }
+
+  let side = "unknown";
+  if (bookRow) {
+    if (Number.isFinite(bookRow.bestAsk) && trade.price >= bookRow.bestAsk) {
+      side = "buy";
+    } else if (Number.isFinite(bookRow.bestBid) && trade.price <= bookRow.bestBid) {
+      side = "sell";
+    } else if (Number.isFinite(bookRow.midPrice)) {
+      side = trade.price >= bookRow.midPrice ? "buy" : "sell";
+    }
+  }
+
+  return { ...trade, isOwn: false, side };
+}
+
+function parseDelimitedText(text) {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const lines = trimmed.split(/\r?\n/).filter(Boolean);
+  const delimiter = lines[0].includes(";") ? ";" : ",";
+  const headers = splitDelimitedLine(lines[0], delimiter).map((header) => header.trim());
+
+  return lines.slice(1).map((line) => {
+    const values = splitDelimitedLine(line, delimiter);
+    const row = {};
+    headers.forEach((header, index) => {
+      row[header] = (values[index] || "").trim();
+    });
+    return row;
+  });
+}
+
+function parseIndicatorText(text) {
+  return parseDelimitedText(text);
+}
+
+function parseLogText(text) {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  if (trimmed.startsWith("{")) {
+    return trimmed
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+  }
+
+  if (trimmed.startsWith("[")) {
+    return JSON.parse(trimmed);
+  }
+
+  return parseDelimitedText(trimmed);
+}
+
+function splitDelimitedLine(line, delimiter) {
+  const cells = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+
+    if (character === '"') {
+      if (inQuotes && line[index + 1] === '"') {
+        current += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (character === delimiter && !inQuotes) {
+      cells.push(current);
+      current = "";
+      continue;
+    }
+
+    current += character;
+  }
+
+  cells.push(current);
+  return cells;
+}
+
+function fetchText(path) {
+  return fetch(path).then((response) => {
+    if (!response.ok) {
+      throw new Error(`Request failed for ${path}`);
+    }
+    return response.text();
+  });
+}
+
+function readOptionalFile(file) {
+  return file ? file.text() : Promise.resolve("");
+}
+
+function prepareCanvas(canvas) {
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(1, Math.floor(rect.width));
+  const height = Math.max(1, Math.floor(rect.height));
+  const dpr = window.devicePixelRatio || 1;
+
+  if (canvas.width !== Math.floor(width * dpr) || canvas.height !== Math.floor(height * dpr)) {
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+  }
+
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, width, height };
+}
+
+function getActiveDataset() {
+  return state.datasets.get(state.activeDatasetKey) || null;
+}
+
+function getActiveProductData() {
+  const dataset = getActiveDataset();
+  if (!dataset) {
+    return null;
+  }
+
+  return dataset.products.get(state.selectedProduct) || null;
+}
+
+function getHoveredRow(view) {
+  if (!state.hoveredTimestamp) {
+    return null;
+  }
+
+  return view.filteredRows.find((row) => row.timestamp === state.hoveredTimestamp) || null;
+}
+
+function findNearestRow(rows, timestamp) {
+  if (!rows.length) {
+    return null;
+  }
+
+  let low = 0;
+  let high = rows.length - 1;
+
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    if (rows[mid].timestamp < timestamp) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+
+  const candidate = rows[low];
+  const previous = rows[Math.max(0, low - 1)];
+  if (!previous) {
+    return candidate;
+  }
+
+  return Math.abs(candidate.timestamp - timestamp) < Math.abs(previous.timestamp - timestamp)
+    ? candidate
+    : previous;
+}
+
+function normalizePrice(row, price) {
+  if (!Number.isFinite(price)) {
+    return NaN;
+  }
+
+  if (state.normalization === "midPrice" && Number.isFinite(row.midPrice)) {
+    return price - row.midPrice;
+  }
+
+  if (state.normalization === "wallMid" && Number.isFinite(row.wallMid)) {
+    return price - row.wallMid;
+  }
+
+  return price;
+}
+
+function getOwnTraderIds() {
+  return new Set(
+    els.ownTraderIdsInput.value
+      .split(",")
+      .map((value) => normalizeId(value))
+      .filter(Boolean),
+  );
+}
+
+function normalizeId(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function formatBookSide(levels) {
+  if (!levels.length) {
+    return ["- none"];
+  }
+
+  return levels.map((level) => `- L${level.level}: ${formatMaybe(level.price)} x ${formatInteger(level.volume)}`);
+}
+
+function groupBy(items, getKey) {
+  const map = new Map();
+  items.forEach((item) => {
+    const key = getKey(item);
+    if (!map.has(key)) {
+      map.set(key, []);
+    }
+    map.get(key).push(item);
+  });
+  return map;
+}
+
+function scale(value, domainMin, domainMax, rangeMin, rangeMax) {
+  if (domainMax === domainMin) {
+    return (rangeMin + rangeMax) / 2;
+  }
+  const ratio = (value - domainMin) / (domainMax - domainMin);
+  return rangeMin + ratio * (rangeMax - rangeMin);
+}
+
+function toNumber(value) {
+  if (value == null || value === "") {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function clampNumber(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function setStatus(message) {
+  els.statusBadge.textContent = message;
+}
+
+function formatMaybe(value) {
+  return Number.isFinite(value) ? value.toFixed(2) : "n/a";
+}
+
+function formatInteger(value) {
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
+    Number.isFinite(value) ? value : 0,
+  );
+}
+
+function formatAxisValue(value) {
+  if (Math.abs(value) >= 1000) {
+    return value.toFixed(0);
+  }
+  if (Math.abs(value) >= 100) {
+    return value.toFixed(1);
+  }
+  return value.toFixed(2);
+}
+
+function formatAxisInteger(value) {
+  const absolute = Math.abs(value);
+  if (absolute >= 1000000) {
+    return `${(value / 1000000).toFixed(1)}m`;
+  }
+  if (absolute >= 1000) {
+    return `${(value / 1000).toFixed(0)}k`;
+  }
+  return value.toFixed(0);
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
