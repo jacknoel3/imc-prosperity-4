@@ -19,6 +19,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current Round: Round 0
 
+**Submission file: `trader.py`** — `tradertest.py` is Jack's copy (identical as of Round 0, kept for reference)
+
 | Product  | Fair Value | Limit | Strategy |
 |----------|-----------|-------|----------|
 | EMERALDS | 10,000    | 20    | Fixed FV MM → see @.claude/rules/products/emeralds.md |
