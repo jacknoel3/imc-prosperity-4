@@ -1,0 +1,5 @@
+metric,value,interpretation
+same_time_return_corr,0.015656289786153788,Cross-product return correlation near zero means weak same-tick stat-arb linkage.
+z_spread_std,1.4270768534861202,Smaller is better for pair-trading stability after day-level normalization.
+z_spread_lag1_autocorr,0.8655667303496726,"High positive autocorr suggests persistence, while negative suggests snapback."
+abs_mean_z_spread,1.1686018799196038,Large average normalized spread means the products drift independently.
