@@ -30,6 +30,9 @@ It ships with built-in selectors for:
 
 - `Round 0 / Day -1`
 - `Round 0 / Day -2`
+- `Round 1 / Day -1`
+- `Round 1 / Day -2`
+- `Round 1 / Day 0`
 
 ## Viewing Your Strategy In The Dashboard
 
@@ -104,12 +107,18 @@ Custom indicators/logs:
 
 ## Built-In Data Expectations
 
-The dashboard reads the current Prosperity tutorial CSVs directly:
+The dashboard reads the current Prosperity CSVs directly from the `data/` folder in this repo:
 
-- [prices_round_0_day_-1.csv](/home/guiro/projects/imc-prosperity-4/data/round0/prices_round_0_day_-1.csv)
-- [prices_round_0_day_-2.csv](/home/guiro/projects/imc-prosperity-4/data/round0/prices_round_0_day_-2.csv)
-- [trades_round_0_day_-1.csv](/home/guiro/projects/imc-prosperity-4/data/round0/trades_round_0_day_-1.csv)
-- [trades_round_0_day_-2.csv](/home/guiro/projects/imc-prosperity-4/data/round0/trades_round_0_day_-2.csv)
+- `data/round0/prices_round_0_day_-1.csv`
+- `data/round0/prices_round_0_day_-2.csv`
+- `data/round0/trades_round_0_day_-1.csv`
+- `data/round0/trades_round_0_day_-2.csv`
+- `data/round1/prices_round_1_day_-1.csv`
+- `data/round1/prices_round_1_day_-2.csv`
+- `data/round1/prices_round_1_day_0.csv`
+- `data/round1/trades_round_1_day_-1.csv`
+- `data/round1/trades_round_1_day_-2.csv`
+- `data/round1/trades_round_1_day_0.csv`
 
 Public round-0 trades do not include trader IDs, so the app infers market-trade direction from the price relative to the current book. Own trades only show up when the uploaded trade file includes buyer or seller IDs matching the `Own Trader IDs` field.
 

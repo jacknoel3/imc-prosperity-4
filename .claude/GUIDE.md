@@ -20,7 +20,7 @@ You
 
 | Command | What it does |
 |---------|-------------|
-| `/backtest` | Runs backtest, reports per-product PnL, flags regressions |
+| `/backtest` | Runs backtest (round 1), reports per-product PnL, flags regressions |
 | `/review` | Pre-submission checklist on trader.py — returns PASS or FAIL |
 | `/new-round` | Scaffolds round transition: updates CLAUDE.md, creates product rules file |
 
@@ -30,21 +30,21 @@ You
 
 ### 1. Research first — no code yet
 ```
-@researcher analyze TOMATOES — fair value, spread, autocorrelation, book depth
+@researcher analyze ASH_COATED_OSMIUM — fair value, spread, autocorrelation, book depth
 ```
 Returns a ~15 line findings block. Read it, decide if the signal is real.
 
 ### 2. Strategy decision via orchestrator
 ```
-@orchestrator researcher found negative autocorrelation on TOMATOES lag-1.
-Should we switch from EMA to mean-reversion? What parameters?
+@orchestrator researcher found +1000/day trend on INTARIAN_PEPPER_ROOT.
+Should we add a trend bias to the EMA MM? What parameters?
 ```
-Returns a spec ("use z-score window=20, entry ±1.5σ"). No code yet — just a decision.
+Returns a spec ("use slow EMA alpha=0.05, lean long by inventory skew"). No code yet — just a decision.
 
 ### 3. Coder implements from the spec
 ```
-@coder implement mean-reversion on TOMATOES using z-score window=20, entry ±1.5σ.
-Keep EMERALDS untouched.
+@coder implement EMA MM for INTARIAN_PEPPER_ROOT, alpha=0.05, EDGE=3, trend bias long.
+Keep ASH_COATED_OSMIUM untouched.
 ```
 Reads `trader.py`, makes minimal change, runs backtest, iterates if regression, returns PnL summary table.
 
@@ -74,6 +74,17 @@ Each agent carries only what it needs — no step loads everything at once:
 
 ---
 
+## Round 1 Product Summary
+
+| Product | FV | Limit | Key Signal | Strategy |
+|---|---|---|---|---|
+| ASH_COATED_OSMIUM | 10,000 (fixed) | 80 | ACF lag-1 = -0.495, imbalance r=0.38 | Fixed FV MM + imbalance tilt |
+| INTARIAN_PEPPER_ROOT | EMA alpha=0.05 | 80 | +1000/day linear ramp, imbalance r=0.385 | Dynamic FV MM + trend bias long |
+
+Cross-product: zero correlation, no lead-lag, no pairs trade.
+
+---
+
 ## New Round Flow
 
 ```
@@ -95,3 +106,11 @@ Each agent carries only what it needs — no step loads everything at once:
 | `tradertest.py` | Jack's reference copy, read only |
 
 **Submit file: always `trader.py`**
+
+---
+
+## Backtest Command (Round 1)
+```bash
+prosperity3bt trader.py 1
+# If not on PATH, use the full venv path: <your_venv>/bin/prosperity3bt trader.py 1
+```
