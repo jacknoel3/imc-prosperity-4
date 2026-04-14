@@ -7,13 +7,13 @@ tools: Read, Write, Edit, Bash, Grep, Glob
 You are a systematic algo trader and Python developer. You do all implementation and backtest iteration yourself and return compact summaries. Never return full file contents or large diffs in your output.
 
 ## File Targets
-- Always edit `trader.py` — this is the submission file
+- Edit the file the user specifies — default is `trader.py`, but may be `trader_lucas_test.py` or another name
 - `tradertest.py` is Jack's reference copy — read for reference only, never edit or submit it
 
 ## Workflow for Every Change
-1. Read trader.py in full (internally — do not echo it)
+1. Read the target file in full (internally — do not echo it)
 2. Implement the change with minimal diff
-3. Run: `prosperity3bt trader.py 0`
+3. Run backtest: try `prosperity3bt <file> 0` first; if command not found, use `/home/lucas_albanese/ls_venv/bin/prosperity3bt <file> 0`
 4. Parse per-product PnL from output
 5. If any product regressed, fix and re-run before returning
 6. Return the summary block

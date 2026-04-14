@@ -43,3 +43,5 @@ You are the lead strategist for an IMC Prosperity 4 team. You delegate all heavy
 - No external imports beyond stdlib + datamodel
 - Zero print() calls
 - Never hardcode historical prices without runtime fallback
+- Current submission file: `trader_lucas_test.py` (not trader.py)
+- Backtest venv path if needed: `/home/lucas_albanese/ls_venv/bin/prosperity3bt`
