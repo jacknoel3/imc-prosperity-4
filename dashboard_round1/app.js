@@ -75,6 +75,7 @@ const state = {
   visibleIndicators: new Set(["midPrice", "wallMid"]),
   hoveredTimestamp: null,
   strategyOverlay: null,
+  zoomDrag: null,
 };
 
 const els = {};
@@ -212,13 +213,22 @@ function bindEvents() {
   els.loadStrategyOverlayButton.addEventListener("click", () => loadStrategyOverlay());
   els.clearStrategyOverlayButton.addEventListener("click", () => clearStrategyOverlay());
 
+  els.mainChartWrapper.addEventListener("mousedown", handleChartMouseDown);
   els.mainChartWrapper.addEventListener("mousemove", handleChartHover);
+  els.mainChartWrapper.addEventListener("wheel", handleChartWheel, { passive: false });
+  els.mainChartWrapper.addEventListener("dblclick", handleChartDoubleClick);
   els.mainChartWrapper.addEventListener("mouseleave", () => {
+    if (state.zoomDrag) {
+      els.mainTooltip.classList.add("hidden");
+      return;
+    }
     state.hoveredTimestamp = null;
     els.mainTooltip.classList.add("hidden");
     renderAll();
   });
 
+  window.addEventListener("mousemove", handleChartDragMove);
+  window.addEventListener("mouseup", handleChartMouseUp);
   window.addEventListener("resize", () => renderAll());
 }
 
@@ -612,7 +622,7 @@ function renderMainChart(view = buildView(getActiveDataset(), getActiveProductDa
   const ctx = prepared.ctx;
   const width = prepared.width;
   const height = prepared.height;
-  const plot = { left: 66, top: 20, right: width - 24, bottom: height - 38 };
+  const plot = getChartPlot(width, height);
 
   ctx.clearRect(0, 0, width, height);
   drawGridAndAxes(ctx, plot, view.rangeMin, view.rangeMax, view.yMin, view.yMax);
@@ -643,6 +653,10 @@ function renderMainChart(view = buildView(getActiveDataset(), getActiveProductDa
     ctx.lineTo(x, plot.bottom);
     ctx.stroke();
     ctx.restore();
+  }
+
+  if (state.zoomDrag) {
+    drawZoomSelection(ctx, plot, state.zoomDrag.startX, state.zoomDrag.currentX);
   }
 }
 
@@ -773,16 +787,20 @@ function updateSnapshotAndLogCards(view, row) {
 }
 
 function handleChartHover(event) {
+  if (state.zoomDrag) {
+    updateZoomDrag(event);
+    return;
+  }
+
   const view = buildView(getActiveDataset(), getActiveProductData());
   if (!view.filteredRows.length) {
     return;
   }
 
-  const rect = els.mainChart.getBoundingClientRect();
-  const x = event.clientX - rect.left;
-  const width = rect.width;
-  const plotLeft = 66;
-  const plotRight = width - 24;
+  const pointer = getChartPointer(event);
+  const x = pointer.rawX;
+  const plotLeft = pointer.plot.left;
+  const plotRight = pointer.plot.right;
 
   if (x < plotLeft || x > plotRight) {
     state.hoveredTimestamp = null;
@@ -838,6 +856,237 @@ function showTooltip(event, view, row) {
   const top = clampNumber(event.clientY - wrapperRect.top + 10, 10, maxTop);
   els.mainTooltip.style.left = `${left}px`;
   els.mainTooltip.style.top = `${top}px`;
+}
+
+function handleChartMouseDown(event) {
+  if (event.button !== 0) {
+    return;
+  }
+
+  const view = buildView(getActiveDataset(), getActiveProductData());
+  if (!view.filteredRows.length) {
+    return;
+  }
+
+  const pointer = getChartPointer(event);
+  if (
+    pointer.rawX < pointer.plot.left ||
+    pointer.rawX > pointer.plot.right ||
+    pointer.rawY < pointer.plot.top ||
+    pointer.rawY > pointer.plot.bottom
+  ) {
+    return;
+  }
+
+  state.zoomDrag = {
+    startX: pointer.clampedX,
+    currentX: pointer.clampedX,
+  };
+  state.hoveredTimestamp = null;
+  els.mainTooltip.classList.add("hidden");
+  els.mainChartWrapper.classList.add("is-zooming");
+  renderMainChart(view);
+  event.preventDefault();
+}
+
+function handleChartDragMove(event) {
+  if (!state.zoomDrag) {
+    return;
+  }
+
+  updateZoomDrag(event);
+}
+
+function handleChartMouseUp(event) {
+  if (!state.zoomDrag) {
+    return;
+  }
+
+  const view = buildView(getActiveDataset(), getActiveProductData());
+  updateZoomDrag(event);
+
+  const pointer = getChartPointer(event);
+  const startX = state.zoomDrag.startX;
+  const endX = pointer.clampedX;
+  const pixelWidth = Math.abs(endX - startX);
+
+  state.zoomDrag = null;
+  els.mainChartWrapper.classList.remove("is-zooming");
+
+  if (pixelWidth < 8) {
+    renderMainChart(view);
+    return;
+  }
+
+  const dragMinX = Math.min(startX, endX);
+  const dragMaxX = Math.max(startX, endX);
+  const nextMin = scale(dragMinX, pointer.plot.left, pointer.plot.right, view.rangeMin, view.rangeMax);
+  const nextMax = scale(dragMaxX, pointer.plot.left, pointer.plot.right, view.rangeMin, view.rangeMax);
+  setVisibleTimeRange(nextMin, nextMax, view);
+  state.hoveredTimestamp = null;
+  renderAll();
+  setStatus(`Zoomed to ${formatInteger(nextMin)} -> ${formatInteger(nextMax)}.`);
+}
+
+function handleChartWheel(event) {
+  const view = buildView(getActiveDataset(), getActiveProductData());
+  if (!view.filteredRows.length) {
+    return;
+  }
+
+  const pointer = getChartPointer(event);
+  if (
+    pointer.rawX < pointer.plot.left ||
+    pointer.rawX > pointer.plot.right ||
+    pointer.rawY < pointer.plot.top ||
+    pointer.rawY > pointer.plot.bottom
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+
+  const fullSpan = view.fullMax - view.fullMin;
+  const currentSpan = view.rangeMax - view.rangeMin;
+  const minimumSpan = Math.max(getBaseTimeStep(view.productData.rows) * 8, 200);
+  const zoomFactor = event.deltaY < 0 ? 0.82 : 1.22;
+  const nextSpan = clampNumber(currentSpan * zoomFactor, minimumSpan, fullSpan);
+
+  if (Math.abs(nextSpan - currentSpan) < 1) {
+    return;
+  }
+
+  const pivotTimestamp = scale(
+    pointer.clampedX,
+    pointer.plot.left,
+    pointer.plot.right,
+    view.rangeMin,
+    view.rangeMax,
+  );
+  const pivotRatio = (pointer.clampedX - pointer.plot.left) / Math.max(1, pointer.plot.right - pointer.plot.left);
+
+  let nextMin = pivotTimestamp - pivotRatio * nextSpan;
+  let nextMax = nextMin + nextSpan;
+
+  if (nextMin < view.fullMin) {
+    nextMax += view.fullMin - nextMin;
+    nextMin = view.fullMin;
+  }
+  if (nextMax > view.fullMax) {
+    nextMin -= nextMax - view.fullMax;
+    nextMax = view.fullMax;
+  }
+
+  setVisibleTimeRange(nextMin, nextMax, view);
+  state.hoveredTimestamp = null;
+  renderAll();
+}
+
+function handleChartDoubleClick() {
+  state.zoomDrag = null;
+  els.mainChartWrapper.classList.remove("is-zooming");
+  initializeTimeRange();
+  renderAll();
+  setStatus("Reset chart zoom.");
+}
+
+function updateZoomDrag(event) {
+  if (!state.zoomDrag) {
+    return;
+  }
+
+  const pointer = getChartPointer(event);
+  state.zoomDrag.currentX = pointer.clampedX;
+  els.mainTooltip.classList.add("hidden");
+  renderMainChart(buildView(getActiveDataset(), getActiveProductData()));
+}
+
+function getChartPointer(event) {
+  const rect = els.mainChart.getBoundingClientRect();
+  const plot = getChartPlot(rect.width, rect.height);
+  const rawX = event.clientX - rect.left;
+  const rawY = event.clientY - rect.top;
+
+  return {
+    plot,
+    rawX,
+    rawY,
+    clampedX: clampNumber(rawX, plot.left, plot.right),
+  };
+}
+
+function getChartPlot(width, height) {
+  return { left: 66, top: 20, right: width - 24, bottom: height - 38 };
+}
+
+function drawZoomSelection(ctx, plot, startX, currentX) {
+  const left = Math.min(startX, currentX);
+  const right = Math.max(startX, currentX);
+  const width = Math.max(1, right - left);
+
+  ctx.save();
+  ctx.fillStyle = "rgba(12, 92, 123, 0.16)";
+  ctx.strokeStyle = "rgba(12, 92, 123, 0.72)";
+  ctx.lineWidth = 1.5;
+  ctx.fillRect(left, plot.top, width, plot.bottom - plot.top);
+  ctx.strokeRect(left, plot.top, width, plot.bottom - plot.top);
+  ctx.restore();
+}
+
+function setVisibleTimeRange(rawMin, rawMax, view) {
+  const step = getBaseTimeStep(view.productData.rows);
+  const minimumSpan = Math.max(step * 4, 200);
+  let nextMin = snapToStep(rawMin, step);
+  let nextMax = snapToStep(rawMax, step);
+
+  nextMin = clampNumber(nextMin, view.fullMin, view.fullMax);
+  nextMax = clampNumber(nextMax, view.fullMin, view.fullMax);
+
+  if (nextMax <= nextMin) {
+    nextMax = Math.min(view.fullMax, nextMin + minimumSpan);
+  }
+
+  if (nextMax - nextMin < minimumSpan) {
+    const midpoint = (nextMin + nextMax) / 2;
+    nextMin = midpoint - minimumSpan / 2;
+    nextMax = midpoint + minimumSpan / 2;
+  }
+
+  if (nextMin < view.fullMin) {
+    nextMax += view.fullMin - nextMin;
+    nextMin = view.fullMin;
+  }
+  if (nextMax > view.fullMax) {
+    nextMin -= nextMax - view.fullMax;
+    nextMax = view.fullMax;
+  }
+
+  nextMin = clampNumber(snapToStep(nextMin, step), view.fullMin, view.fullMax);
+  nextMax = clampNumber(snapToStep(nextMax, step), view.fullMin, view.fullMax);
+
+  if (nextMax <= nextMin) {
+    nextMax = Math.min(view.fullMax, nextMin + minimumSpan);
+  }
+
+  els.timeMinInput.value = String(Math.round(nextMin));
+  els.timeMaxInput.value = String(Math.round(nextMax));
+}
+
+function getBaseTimeStep(rows) {
+  for (let index = 1; index < rows.length; index += 1) {
+    const diff = rows[index].timestamp - rows[index - 1].timestamp;
+    if (diff > 0) {
+      return diff;
+    }
+  }
+  return 100;
+}
+
+function snapToStep(value, step) {
+  if (!Number.isFinite(value) || !Number.isFinite(step) || step <= 0) {
+    return value;
+  }
+  return Math.round(value / step) * step;
 }
 
 function drawGridAndAxes(ctx, plot, xMin, xMax, yMin, yMax) {
@@ -1003,7 +1252,7 @@ function renderLegend(view) {
     overlayLabel = `Backtest overlay loaded: ${state.strategyOverlay.label}. Strategy fills are drawn last so they sit on top of the market plot.`;
   }
 
-  els.legendNote.textContent = `${normalizationLabel} Visible book levels: ${levelsLabel}. Quote dot size scales with quoted volume. Market trade direction is inferred from price vs. the current book unless the trade matches one of your trader IDs. ${overlayLabel}`;
+  els.legendNote.textContent = `${normalizationLabel} Visible book levels: ${levelsLabel}. Quote dot size scales with quoted volume. Market trade direction is inferred from price vs. the current book unless the trade matches one of your trader IDs. Use the mouse wheel to zoom, drag across the chart to zoom into a window, and double-click to reset. ${overlayLabel}`;
 }
 
 function drawTrades(ctx, trades, xScale, yScale, productData) {

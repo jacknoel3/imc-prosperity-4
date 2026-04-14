@@ -264,6 +264,15 @@ button:hover {
   overflow: hidden;
 }
 
+#main-chart-wrapper {
+  cursor: crosshair;
+  user-select: none;
+}
+
+#main-chart-wrapper.is-zooming {
+  cursor: ew-resize;
+}
+
 .canvas-shell.mini {
   min-height: 220px;
 }
