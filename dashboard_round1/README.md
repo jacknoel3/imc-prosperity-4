@@ -1,10 +1,20 @@
-# Prosperity Round 0 Dashboard
+# Prosperity Round 1 Dashboard
 
-This is the preserved round 0 dashboard for the tutorial products `EMERALDS` and
-`TOMATOES`.
+This is the new round 1 dashboard for the Intara market:
 
-If you want the current competition view for Intara, open the round 1 dashboard at
-`http://localhost:8000/dashboard_round1/`.
+- `ASH_COATED_OSMIUM`
+- `INTARIAN_PEPPER_ROOT`
+
+If you want the older tutorial-style view for `EMERALDS` and `TOMATOES`, open
+`http://localhost:8000/dashboard/`.
+
+## Round 1 Context
+
+- phase: `Trading Groundwork`
+- planet: `Intara`
+- objective: `200,000 XIRECs` net profit before the beginning of day 3
+- `ASH_COATED_OSMIUM`: fixed fair value around `10,000`, classical stationary market-making product
+- `INTARIAN_PEPPER_ROOT`: trending product with dynamic fair value and roughly `+1000/day` drift
 
 ## Run It
 
@@ -17,13 +27,14 @@ python3 -m http.server 8000
 Then open:
 
 ```text
-http://localhost:8000/dashboard/
+http://localhost:8000/dashboard_round1/
 ```
 
 Built-in selectors:
 
-- `Round 0 / Day -1 / EMERALDS + TOMATOES`
-- `Round 0 / Day -2 / EMERALDS + TOMATOES`
+- `Round 1 / Day 0 / ASH_COATED_OSMIUM + INTARIAN_PEPPER_ROOT`
+- `Round 1 / Day -1 / ASH_COATED_OSMIUM + INTARIAN_PEPPER_ROOT`
+- `Round 1 / Day -2 / ASH_COATED_OSMIUM + INTARIAN_PEPPER_ROOT`
 
 ## What It Shows
 
@@ -44,12 +55,12 @@ directly into the dashboard.
 
 Typical flow:
 
-1. Run your strategy in your backtester.
+1. Run your round 1 strategy in your backtester.
 2. Export your fills to a `Backtest Trades CSV`.
-3. Pick the round 0 market dataset you want as the background.
+3. Pick the round 1 market dataset you want as the background.
 4. Load the `Backtest Trades CSV` as an overlay.
 
-If your strategy already ran on the built-in round 0 data, you usually only need:
+For built-in data, you usually only need:
 
 - `Backtest Trades CSV`
 
@@ -62,20 +73,22 @@ For custom datasets:
 
 Optional extras:
 
-- `Indicator CSV` for fair values, EMAs, z-scores, spreads, or other signals
+- `Indicator CSV` for fair values, EMAs, trend estimates, spreads, or other signals
 - `Log File` for timestamp-synced notes
 
 ## Built-In Data
 
-The round 0 dashboard reads:
+The round 1 dashboard reads:
 
-- `data/round0/prices_round_0_day_-1.csv`
-- `data/round0/prices_round_0_day_-2.csv`
-- `data/round0/trades_round_0_day_-1.csv`
-- `data/round0/trades_round_0_day_-2.csv`
+- `data/round1/prices_round_1_day_0.csv`
+- `data/round1/prices_round_1_day_-1.csv`
+- `data/round1/prices_round_1_day_-2.csv`
+- `data/round1/trades_round_1_day_0.csv`
+- `data/round1/trades_round_1_day_-1.csv`
+- `data/round1/trades_round_1_day_-2.csv`
 
-Public round 0 trades do not include trader IDs, so market-trade direction is
-inferred from trade price versus the current book unless the trade matches one of
+Public trade files do not reliably identify your trader, so market-trade direction
+is inferred from trade price versus the current book unless the trade matches one of
 your IDs.
 
 ## Accepted Upload Formats
@@ -93,9 +106,9 @@ Backtest Trades CSV:
 
 ```text
 timestamp,product,price,quantity,side,pnl,position
-100,EMERALDS,9998,5,buy,0,5
-400,EMERALDS,10002,5,sell,20,0
-700,TOMATOES,5009,3,sell,17,2
+200,ASH_COATED_OSMIUM,10003,5,sell,-15,-5
+5200,INTARIAN_PEPPER_ROOT,12001,3,buy,23,-1
+6300,ASH_COATED_OSMIUM,10008,2,sell,24,-7
 ```
 
 - required fields: `timestamp`, `product` or `symbol`, `price`, and either `quantity` + `side`
@@ -106,22 +119,22 @@ Examples of accepted backtest trade formats:
 
 ```text
 timestamp,product,price,quantity,side
-100,EMERALDS,9998,5,buy
-400,EMERALDS,10002,5,sell
+200,ASH_COATED_OSMIUM,10003,5,sell
+5200,INTARIAN_PEPPER_ROOT,12001,3,buy
 ```
 
 ```text
 timestamp,symbol,fill_price,signed_quantity,pnl,position
-100,EMERALDS,9998,5,0,5
-400,EMERALDS,10002,-5,20,0
+200,ASH_COATED_OSMIUM,10003,-5,-15,-5
+5200,INTARIAN_PEPPER_ROOT,12001,3,23,-1
 ```
 
 Indicator CSV:
 
 ```text
 timestamp,product,name,value
-0,EMERALDS,fair_value,10000
-100,TOMATOES,ema_fv,5006.4
+0,ASH_COATED_OSMIUM,fair_value,10000
+100,INTARIAN_PEPPER_ROOT,trend_fair,12000.1
 ```
 
 Log file:

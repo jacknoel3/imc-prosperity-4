@@ -2,16 +2,22 @@
 
 const BUILTIN_DATASETS = [
   {
-    key: "round0-day--1",
-    label: "Round 0 / Day -1 / EMERALDS + TOMATOES",
-    pricePath: "../data/round0/prices_round_0_day_-1.csv",
-    tradePath: "../data/round0/trades_round_0_day_-1.csv",
+    key: "round1-day-0",
+    label: "Round 1 / Day 0 / ASH_COATED_OSMIUM + INTARIAN_PEPPER_ROOT",
+    pricePath: "../data/round1/prices_round_1_day_0.csv",
+    tradePath: "../data/round1/trades_round_1_day_0.csv",
   },
   {
-    key: "round0-day--2",
-    label: "Round 0 / Day -2 / EMERALDS + TOMATOES",
-    pricePath: "../data/round0/prices_round_0_day_-2.csv",
-    tradePath: "../data/round0/trades_round_0_day_-2.csv",
+    key: "round1-day--1",
+    label: "Round 1 / Day -1 / ASH_COATED_OSMIUM + INTARIAN_PEPPER_ROOT",
+    pricePath: "../data/round1/prices_round_1_day_-1.csv",
+    tradePath: "../data/round1/trades_round_1_day_-1.csv",
+  },
+  {
+    key: "round1-day--2",
+    label: "Round 1 / Day -2 / ASH_COATED_OSMIUM + INTARIAN_PEPPER_ROOT",
+    pricePath: "../data/round1/prices_round_1_day_-2.csv",
+    tradePath: "../data/round1/trades_round_1_day_-2.csv",
   },
 ];
 
