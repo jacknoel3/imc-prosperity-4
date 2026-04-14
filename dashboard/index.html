@@ -104,6 +104,10 @@
             <input id="show-strategy-trades-toggle" type="checkbox" checked />
             <span>Backtest Trades</span>
           </label>
+          <label class="toggle-inline">
+            <input id="show-strategy-quotes-toggle" type="checkbox" />
+            <span>Backtest Quotes</span>
+          </label>
         </div>
 
         <div class="toggle-sections">
@@ -242,8 +246,9 @@
             <button id="load-strategy-overlay-button" type="button">Load Backtest Overlay</button>
             <button id="clear-strategy-overlay-button" type="button">Clear Backtest Overlay</button>
             <p class="helper-text">
-              Backtest trade format: `timestamp,product,price,quantity,side` with optional
-              `pnl` and `position`. Quantity can also be signed instead of providing `side`.
+              Backtest overlay format: `timestamp,product,price,quantity,side` with optional
+              `event_type` (`fill` or `quote`), `pnl`, and `position`. Quantity can also be
+              signed instead of providing `side`.
               Indicator format: `timestamp,product,name,value`. Log format:
               `timestamp,product,message` or JSONL with those fields.
             </p>

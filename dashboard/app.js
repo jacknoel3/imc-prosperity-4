@@ -33,6 +33,9 @@ const COLORS = {
   strategyBuy: "rgba(229, 147, 0, 0.98)",
   strategySell: "rgba(192, 72, 72, 0.98)",
   strategyUnknown: "rgba(74, 84, 96, 0.98)",
+  strategyQuoteBuy: "rgba(196, 127, 12, 0.92)",
+  strategyQuoteSell: "rgba(166, 68, 68, 0.92)",
+  strategyQuoteUnknown: "rgba(74, 84, 96, 0.82)",
   grid: "rgba(47, 62, 82, 0.12)",
   axis: "rgba(41, 55, 71, 0.75)",
   midPrice: "rgba(47, 62, 82, 0.85)",
@@ -65,6 +68,7 @@ const state = {
   showMarketTrades: true,
   showOwnTrades: true,
   showStrategyTrades: true,
+  showStrategyQuotes: false,
   visibleLevels: { 1: true, 2: true, 3: true },
   visibleIndicators: new Set(["midPrice", "wallMid"]),
   hoveredTimestamp: null,
@@ -95,6 +99,7 @@ function bindElements() {
   els.showMarketTradesToggle = document.getElementById("show-market-trades-toggle");
   els.showOwnTradesToggle = document.getElementById("show-own-trades-toggle");
   els.showStrategyTradesToggle = document.getElementById("show-strategy-trades-toggle");
+  els.showStrategyQuotesToggle = document.getElementById("show-strategy-quotes-toggle");
   els.level1Toggle = document.getElementById("level-1-toggle");
   els.level2Toggle = document.getElementById("level-2-toggle");
   els.level3Toggle = document.getElementById("level-3-toggle");
@@ -181,6 +186,11 @@ function bindEvents() {
 
   els.showStrategyTradesToggle.addEventListener("change", (event) => {
     state.showStrategyTrades = event.target.checked;
+    renderAll();
+  });
+
+  els.showStrategyQuotesToggle.addEventListener("change", (event) => {
+    state.showStrategyQuotes = event.target.checked;
     renderAll();
   });
 
@@ -333,7 +343,7 @@ async function loadStrategyOverlay() {
     });
 
     if (!overlay.products.size) {
-      throw new Error("No usable strategy trades were found.");
+      throw new Error("No usable strategy overlay rows were found.");
     }
 
     state.strategyOverlay = overlay;
@@ -352,10 +362,14 @@ async function loadStrategyOverlay() {
     }
 
     renderAll();
+    const fillCount = formatInteger(overlay.trades.length);
+    const quoteCount = formatInteger(overlay.quotes.length);
     if (overlayProducts.length === 1) {
-      setStatus(`Loaded backtest overlay: ${strategyFile.name} for ${overlayProducts[0]}.`);
+      setStatus(
+        `Loaded backtest overlay: ${strategyFile.name} for ${overlayProducts[0]} (${fillCount} fills, ${quoteCount} quotes).`,
+      );
     } else {
-      setStatus(`Loaded backtest overlay: ${strategyFile.name}`);
+      setStatus(`Loaded backtest overlay: ${strategyFile.name} (${fillCount} fills, ${quoteCount} quotes).`);
     }
   } catch (error) {
     console.error(error);
@@ -467,6 +481,9 @@ function renderAll() {
   ];
   if (state.strategyOverlay) {
     summaryParts.push(`${formatInteger(view.visibleStrategyTrades.length)} backtest trades shown`);
+    if (view.strategyProduct?.quotes?.length) {
+      summaryParts.push(`${formatInteger(view.visibleStrategyQuotes.length)} backtest quotes shown`);
+    }
   }
   els.chartSummary.textContent = summaryParts.join(", ");
 
@@ -518,6 +535,11 @@ function buildView(dataset, productData) {
         .filter((trade) => trade.timestamp >= rangeMin && trade.timestamp <= rangeMax)
         .filter((trade) => trade.quantity >= tradeMin && trade.quantity <= tradeMax)
     : [];
+  const visibleStrategyQuotes = strategyProduct && state.showStrategyQuotes
+    ? strategyProduct.quotes
+        .filter((quote) => quote.timestamp >= rangeMin && quote.timestamp <= rangeMax)
+        .filter((quote) => quote.quantity >= tradeMin && quote.quantity <= tradeMax)
+    : [];
 
   const yValues = [];
   const indicatorSeries = [];
@@ -568,6 +590,13 @@ function buildView(dataset, productData) {
     }
   });
 
+  visibleStrategyQuotes.forEach((quote) => {
+    const row = productData.rowByTimestamp.get(quote.timestamp);
+    if (row) {
+      yValues.push(normalizePrice(row, quote.price));
+    }
+  });
+
   if (!yValues.length) {
     filteredRows.forEach((row) => yValues.push(normalizePrice(row, row.midPrice)));
   }
@@ -594,6 +623,7 @@ function buildView(dataset, productData) {
     filteredRows,
     visibleTrades,
     visibleStrategyTrades,
+    visibleStrategyQuotes,
     selectedLevels,
     indicatorSeries,
     yMin,
@@ -624,6 +654,7 @@ function renderMainChart(view = buildView(getActiveDataset(), getActiveProductDa
 
   drawIndicatorLines(ctx, view.indicatorSeries, xScale, yScale, view.productData);
   drawTrades(ctx, view.visibleTrades, xScale, yScale, view.productData);
+  drawStrategyQuotes(ctx, view.visibleStrategyQuotes, xScale, yScale, view.productData);
   drawStrategyTrades(ctx, view.visibleStrategyTrades, xScale, yScale, view.productData);
 
   const hoveredRow = getHoveredRow(view);
@@ -691,6 +722,7 @@ function updateStatsCard(view) {
     `rows in view: ${formatInteger(view.filteredRows.length)}`,
     `trades shown: ${formatInteger(view.visibleTrades.length)}`,
     `backtest trades shown: ${formatInteger(view.visibleStrategyTrades.length)}`,
+    `backtest quotes shown: ${formatInteger(view.visibleStrategyQuotes.length)}`,
     `avg spread: ${formatMaybe(avgSpread)}`,
     `mid range: ${formatMaybe(minMid)} -> ${formatMaybe(maxMid)}`,
     `normalization: ${state.normalization}`,
@@ -716,6 +748,9 @@ function updateSnapshotAndLogCards(view, row) {
     .slice(0, 8);
   const strategyTrades = view.visibleStrategyTrades
     .filter((trade) => trade.timestamp === row.timestamp)
+    .slice(0, 8);
+  const strategyQuotes = view.visibleStrategyQuotes
+    .filter((quote) => quote.timestamp === row.timestamp)
     .slice(0, 8);
 
   const snapshotLines = [
@@ -751,6 +786,13 @@ function updateSnapshotAndLogCards(view, row) {
         suffix += ` pnl=${formatMaybe(trade.pnl)}`;
       }
       snapshotLines.push(`- ${label} ${trade.quantity} @ ${formatMaybe(trade.price)}${suffix}`);
+    });
+  }
+
+  if (strategyQuotes.length) {
+    snapshotLines.push("", "backtest quotes:");
+    strategyQuotes.forEach((quote) => {
+      snapshotLines.push(`- ${quote.side || "unknown"} ${quote.quantity} @ ${formatMaybe(quote.price)}`);
     });
   }
 
@@ -801,6 +843,7 @@ function handleChartHover(event) {
 function showTooltip(event, view, row) {
   const trades = view.visibleTrades.filter((trade) => trade.timestamp === row.timestamp);
   const strategyTrades = view.visibleStrategyTrades.filter((trade) => trade.timestamp === row.timestamp);
+  const strategyQuotes = view.visibleStrategyQuotes.filter((quote) => quote.timestamp === row.timestamp);
   const lines = [
     `t=${formatInteger(row.timestamp)}`,
     `mid=${formatMaybe(row.midPrice)} wall=${formatMaybe(row.wallMid)}`,
@@ -819,6 +862,13 @@ function showTooltip(event, view, row) {
     lines.push(`backtest=${strategyTrades.length}`);
     strategyTrades.slice(0, 5).forEach((trade) => {
       lines.push(`bt ${trade.side}: ${trade.quantity} @ ${formatMaybe(trade.price)}`);
+    });
+  }
+
+  if (strategyQuotes.length) {
+    lines.push(`quotes=${strategyQuotes.length}`);
+    strategyQuotes.slice(0, 5).forEach((quote) => {
+      lines.push(`q ${quote.side}: ${quote.quantity} @ ${formatMaybe(quote.price)}`);
     });
   }
 
@@ -947,6 +997,31 @@ function renderLegend(view) {
 
   items.push(
     buildLegendItem(
+      drawLegendRing(COLORS.strategyQuoteBuy),
+      "Backtest buy quote",
+      !state.showStrategyQuotes || !view.visibleStrategyQuotes.some((quote) => quote.side === "buy"),
+    ),
+  );
+  items.push(
+    buildLegendItem(
+      drawLegendOutlinedSquare(COLORS.strategyQuoteSell),
+      "Backtest sell quote",
+      !state.showStrategyQuotes || !view.visibleStrategyQuotes.some((quote) => quote.side === "sell"),
+    ),
+  );
+
+  if (view.visibleStrategyQuotes.some((quote) => quote.side === "unknown")) {
+    items.push(
+      buildLegendItem(
+        drawLegendOutlinedSquare(COLORS.strategyQuoteUnknown),
+        "Backtest quote (unknown side)",
+        !state.showStrategyQuotes,
+      ),
+    );
+  }
+
+  items.push(
+    buildLegendItem(
       drawLegendDiamond(COLORS.strategyBuy),
       "Backtest buy fill",
       !state.showStrategyTrades || !view.visibleStrategyTrades.some((trade) => trade.side === "buy"),
@@ -994,7 +1069,7 @@ function renderLegend(view) {
 
   let overlayLabel = "No backtest overlay loaded.";
   if (state.strategyOverlay) {
-    overlayLabel = `Backtest overlay loaded: ${state.strategyOverlay.label}. Strategy fills are drawn last so they sit on top of the market plot.`;
+    overlayLabel = `Backtest overlay loaded: ${state.strategyOverlay.label}. Posted strategy quotes use outlined markers and fills use diamonds. Strategy fills are drawn last so they sit on top of the market plot.`;
   }
 
   els.legendNote.textContent = `${normalizationLabel} Visible book levels: ${levelsLabel}. Quote dot size scales with quoted volume. Market trade direction is inferred from price vs. the current book unless the trade matches one of your trader IDs. ${overlayLabel}`;
@@ -1078,6 +1153,25 @@ function drawStrategyTrades(ctx, trades, xScale, yScale, productData) {
   }
 }
 
+function drawStrategyQuotes(ctx, quotes, xScale, yScale, productData) {
+  for (const quote of quotes) {
+    const row = productData.rowByTimestamp.get(quote.timestamp);
+    if (!row) {
+      continue;
+    }
+
+    const x = xScale(quote.timestamp);
+    const y = yScale(normalizePrice(row, quote.price));
+    if (quote.side === "buy") {
+      drawRing(ctx, x, y, 6, COLORS.strategyQuoteBuy);
+    } else if (quote.side === "sell") {
+      drawOutlinedSquare(ctx, x, y, 10, COLORS.strategyQuoteSell);
+    } else {
+      drawOutlinedSquare(ctx, x, y, 10, COLORS.strategyQuoteUnknown);
+    }
+  }
+}
+
 function drawDiamond(ctx, x, y, size, fillColor, strokeColor) {
   ctx.save();
   ctx.fillStyle = fillColor;
@@ -1091,6 +1185,24 @@ function drawDiamond(ctx, x, y, size, fillColor, strokeColor) {
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
+  ctx.restore();
+}
+
+function drawRing(ctx, x, y, radius, color) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawOutlinedSquare(ctx, x, y, size, color) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.8;
+  ctx.strokeRect(x - size / 2, y - size / 2, size, size);
   ctx.restore();
 }
 
@@ -1122,6 +1234,14 @@ function drawLegendSquare(color) {
 
 function drawLegendDiamond(color) {
   return `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><polygon points="8,1 15,8 8,15 1,8" fill="${color}" stroke="rgba(25, 29, 36, 0.95)" stroke-width="1.25"></polygon></svg>`;
+}
+
+function drawLegendRing(color) {
+  return `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5" fill="none" stroke="${color}" stroke-width="2"></circle></svg>`;
+}
+
+function drawLegendOutlinedSquare(color) {
+  return `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="3" width="10" height="10" fill="none" stroke="${color}" stroke-width="2"></rect></svg>`;
 }
 
 function renderSeriesChart(canvas, series, color, emptyMessage) {
@@ -1492,7 +1612,7 @@ function buildDataset({ key, label, priceRowsRaw, tradeRowsRaw, indicatorRowsRaw
 
 function buildStrategyOverlay({ label, strategyRowsRaw }) {
   const strategyRows = strategyRowsRaw
-    .map((row) => normalizeStrategyTradeRow(row))
+    .map((row) => normalizeStrategyOverlayRow(row))
     .filter(
       (row) =>
         row.product &&
@@ -1509,14 +1629,22 @@ function buildStrategyOverlay({ label, strategyRowsRaw }) {
     });
 
   const products = new Map();
+  const trades = [];
+  const quotes = [];
   strategyRows.forEach((row) => {
     if (!products.has(row.product)) {
-      products.set(row.product, { trades: [] });
+      products.set(row.product, { trades: [], quotes: [] });
     }
-    products.get(row.product).trades.push(row);
+    if (row.eventType === "quote") {
+      products.get(row.product).quotes.push(row);
+      quotes.push(row);
+    } else {
+      products.get(row.product).trades.push(row);
+      trades.push(row);
+    }
   });
 
-  return { label, trades: strategyRows, products };
+  return { label, trades, quotes, products };
 }
 
 function normalizePriceRow(row) {
@@ -1599,7 +1727,7 @@ function normalizeLogRow(row) {
   };
 }
 
-function normalizeStrategyTradeRow(row) {
+function normalizeStrategyOverlayRow(row) {
   const product = String(
     firstDefinedValue(row, ["product", "symbol", "instrument", "asset"]) || "",
   ).trim();
@@ -1642,6 +1770,9 @@ function normalizeStrategyTradeRow(row) {
           ? "sell"
           : "unknown"
       : "unknown");
+  const eventType = normalizeStrategyEventType(
+    firstDefinedValue(row, ["event_type", "record_type", "kind", "type"]),
+  );
 
   return {
     timestamp,
@@ -1650,9 +1781,27 @@ function normalizeStrategyTradeRow(row) {
     quantity,
     signedQuantity,
     side: normalizedSide,
+    eventType,
     pnl: firstNumberValue(row, ["pnl", "profit_and_loss", "profit", "realized_pnl", "total_pnl"]),
     position: firstNumberValue(row, ["position", "pos", "inventory", "net_position"]),
   };
+}
+
+function normalizeStrategyEventType(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) {
+    return "fill";
+  }
+
+  if (["fill", "trade", "execution", "executed_fill"].includes(normalized)) {
+    return "fill";
+  }
+
+  if (["quote", "order", "posted_quote", "post", "resting_quote"].includes(normalized)) {
+    return "quote";
+  }
+
+  return "fill";
 }
 
 function decorateTrade(trade, bookRow, ownIds) {
