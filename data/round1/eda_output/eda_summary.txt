@@ -11,6 +11,8 @@ ASH_COATED_OSMIUM vs INTARIAN_PEPPER_ROOT lag 1: corr -0.0137
 INTARIAN_PEPPER_ROOT vs ASH_COATED_OSMIUM lag -1: corr -0.0137
 
 Cross-product arbitrage looks weak: same-time and lead-lag correlations are too small to support a reliable pair trade. Treat the products as mostly independent and trade them as singles.
+Exhaustive lag sweep (-200 to +200): best abs corr was 0.0214 at lag 130, which is still economically weak.
+Best conditional slice was both_abs_move_top_decile with abs corr 0.1666 at lag 35 on n=387; treat as exploratory, not robust.
 
 Working hypothesis:
 - ASH_COATED_OSMIUM is the better candidate for short-horizon mean-reversion or market making.

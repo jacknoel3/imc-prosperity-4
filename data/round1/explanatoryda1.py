@@ -12,6 +12,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from math import sqrt
 
 
 # =========================
@@ -275,7 +276,114 @@ def arbitrage_diagnostics(wide_mid, products):
     return pd.DataFrame(rows)
 
 
-def build_text_conclusion(summary_df, lead_lag_df, arb_df):
+def lag_sweep_with_stats(a, b, max_lag=200):
+    rows = []
+    for lag in range(-max_lag, max_lag + 1):
+        shifted = b.shift(lag)
+        tmp = pd.concat([a, shifted], axis=1).dropna()
+        n = len(tmp)
+        corr = tmp.iloc[:, 0].corr(tmp.iloc[:, 1]) if n >= 3 else np.nan
+        if pd.notna(corr) and n >= 3 and abs(corr) < 1:
+            t_stat = abs(corr) * sqrt((n - 2) / (1 - corr * corr))
+        else:
+            t_stat = np.nan
+        rows.append(
+            {
+                "lag": lag,
+                "corr": corr,
+                "n": n,
+                "t_stat_abs": t_stat,
+                "abs_corr": abs(corr) if pd.notna(corr) else np.nan,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def mutual_information_terciles(a, b):
+    tmp = pd.concat([a, b], axis=1).dropna().copy()
+    if len(tmp) < 30:
+        return np.nan
+    try:
+        ax = pd.qcut(tmp.iloc[:, 0].rank(method="first"), 3, labels=False)
+        bx = pd.qcut(tmp.iloc[:, 1].rank(method="first"), 3, labels=False)
+    except ValueError:
+        return np.nan
+    ct = pd.crosstab(ax, bx, normalize="all")
+    px = ct.sum(axis=1)
+    py = ct.sum(axis=0)
+    mi = 0.0
+    for i in ct.index:
+        for j in ct.columns:
+            p = ct.loc[i, j]
+            if p > 0:
+                mi += p * np.log(p / (px.loc[i] * py.loc[j]))
+    return mi
+
+
+def conditional_cross_product_analysis(wide_conditional, a_name, b_name, max_lag=50):
+    conds = [("all", pd.Series(True, index=wide_conditional.index))]
+
+    if "time_block" in wide_conditional.columns:
+        for block in sorted(wide_conditional["time_block"].dropna().unique()):
+            conds.append((f"time_block_{int(block)}", wide_conditional["time_block"] == block))
+
+    for product in [a_name, b_name]:
+        for field, label, low_q, high_q in [
+            ("dmid_abs", "abs_move", 0.90, None),
+            ("imb", "imb_high", None, 0.90),
+            ("imb", "imb_low", 0.10, None),
+            ("spread", "wide_spread", None, 0.90),
+            ("spread", "tight_spread", 0.10, None),
+            ("top_depth", "deep_book", None, 0.90),
+            ("top_depth", "thin_book", 0.10, None),
+        ]:
+            col = f"{product}_{field}"
+            if col not in wide_conditional.columns:
+                continue
+            series = wide_conditional[col]
+            if label in {"imb_high", "wide_spread", "deep_book"}:
+                conds.append((f"{product}_{label}", series >= series.quantile(high_q)))
+            elif label in {"imb_low", "tight_spread", "thin_book"}:
+                conds.append((f"{product}_{label}", series <= series.quantile(low_q)))
+            elif label == "abs_move":
+                conds.append((f"{product}_{label}_top_decile", series >= series.quantile(low_q)))
+
+    both_big = (
+        (wide_conditional[f"{a_name}_dmid_abs"] >= wide_conditional[f"{a_name}_dmid_abs"].quantile(0.90))
+        & (wide_conditional[f"{b_name}_dmid_abs"] >= wide_conditional[f"{b_name}_dmid_abs"].quantile(0.90))
+    )
+    conds.append(("both_abs_move_top_decile", both_big))
+
+    rows = []
+    for condition_name, mask in conds:
+        sub = wide_conditional[mask.fillna(False)].copy()
+        if len(sub) < 200:
+            continue
+        x = sub[f"{a_name}_dmid"]
+        y = sub[f"{b_name}_dmid"]
+        sweep = lag_sweep_with_stats(x, y, max_lag=max_lag)
+        best_idx = sweep["abs_corr"].idxmax()
+        best = sweep.loc[best_idx]
+        same_corr = corr_safe(x, y)
+        sign_sub = ((np.sign(x) == np.sign(y)) & (x != 0) & (y != 0))
+        rows.append(
+            {
+                "condition": condition_name,
+                "n": len(sub),
+                "same_corr": same_corr,
+                "best_lag": int(best["lag"]),
+                "best_corr": best["corr"],
+                "best_abs_corr": best["abs_corr"],
+                "best_lag_n": int(best["n"]),
+                "best_lag_t_stat_abs": best["t_stat_abs"],
+                "same_sign_rate_nonzero": sign_sub.mean(),
+                "mutual_information_terciles": mutual_information_terciles(x, y),
+            }
+        )
+    return pd.DataFrame(rows).sort_values("best_abs_corr", ascending=False)
+
+
+def build_text_conclusion(summary_df, lead_lag_df, arb_df, all_lag_df=None, conditional_df=None):
     lines = []
     lines.append("Round 1 EDA conclusion")
     lines.append("======================")
@@ -313,6 +421,20 @@ def build_text_conclusion(summary_df, lead_lag_df, arb_df):
         lines.append(verdict)
     else:
         lines.append("No pair-trading verdict produced.")
+
+    if all_lag_df is not None and not all_lag_df.empty:
+        best_global = all_lag_df.sort_values("abs_corr", ascending=False).head(1).iloc[0]
+        lines.append(
+            f"Exhaustive lag sweep (-200 to +200): best abs corr was {best_global['abs_corr']:.4f} "
+            f"at lag {int(best_global['lag'])}, which is still economically weak."
+        )
+
+    if conditional_df is not None and not conditional_df.empty:
+        best_cond = conditional_df.iloc[0]
+        lines.append(
+            f"Best conditional slice was {best_cond['condition']} with abs corr {best_cond['best_abs_corr']:.4f} "
+            f"at lag {int(best_cond['best_lag'])} on n={int(best_cond['n'])}; treat as exploratory, not robust."
+        )
 
     lines.append("")
     lines.append("Working hypothesis:")
@@ -720,6 +842,8 @@ wide_returns = reduce(lambda left, right: pd.merge(left, right, on=["day", "time
 wide_mids = reduce(lambda left, right: pd.merge(left, right, on=["day", "timestamp"], how="outer"), mid_wide)
 wide_returns = wide_returns.sort_values(["day", "timestamp"]).reset_index(drop=True)
 wide_mids = wide_mids.sort_values(["day", "timestamp"]).reset_index(drop=True)
+all_lag_df = pd.DataFrame()
+conditional_df = pd.DataFrame()
 
 if len(products) >= 2:
     corr_mat = wide_returns[products].corr()
@@ -754,6 +878,71 @@ if len(products) >= 2:
 
     if len(products) == 2:
         a, b = products
+        wide_conditional = wide_returns[["day", "timestamp", a, b]].copy()
+        wide_conditional = wide_conditional.rename(columns={a: f"{a}_dmid", b: f"{b}_dmid"})
+        first_product = True
+        for product in products:
+            cols = ["day", "timestamp", "spread", "top_depth", "imbalance_l1"]
+            if first_product:
+                cols.append("time_block")
+            px = prices_feat[prices_feat["product"] == product][cols].copy()
+            px = px.rename(
+                columns={
+                    "spread": f"{product}_spread",
+                    "top_depth": f"{product}_top_depth",
+                    "imbalance_l1": f"{product}_imb",
+                }
+            )
+            wide_conditional = wide_conditional.merge(px, on=["day", "timestamp"], how="left")
+            first_product = False
+
+        wide_conditional[f"{a}_dmid_abs"] = wide_conditional[f"{a}_dmid"].abs()
+        wide_conditional[f"{b}_dmid_abs"] = wide_conditional[f"{b}_dmid"].abs()
+
+        all_lag_df = lag_sweep_with_stats(wide_conditional[f"{a}_dmid"], wide_conditional[f"{b}_dmid"], max_lag=200)
+        all_lag_df.to_csv(OUTPUT_DIR / "all_lag_correlation_sweep.csv", index=False)
+
+        by_day_rows = []
+        for day, sub in wide_conditional.groupby("day", sort=True):
+            sweep = lag_sweep_with_stats(sub[f"{a}_dmid"], sub[f"{b}_dmid"], max_lag=100)
+            best = sweep.sort_values("abs_corr", ascending=False).head(1).iloc[0]
+            by_day_rows.append(
+                {
+                    "day": day,
+                    "best_lag": int(best["lag"]),
+                    "best_corr": best["corr"],
+                    "best_abs_corr": best["abs_corr"],
+                    "n": int(best["n"]),
+                    "t_stat_abs": best["t_stat_abs"],
+                }
+            )
+        by_day_lag_df = pd.DataFrame(by_day_rows)
+        by_day_lag_df.to_csv(OUTPUT_DIR / "by_day_best_lag_correlations.csv", index=False)
+
+        conditional_df = conditional_cross_product_analysis(wide_conditional, a, b, max_lag=50)
+        conditional_df.to_csv(OUTPUT_DIR / "conditional_cross_product_correlations.csv", index=False)
+
+        x = wide_conditional[f"{a}_dmid"]
+        y = wide_conditional[f"{b}_dmid"]
+        sign_nonzero = ((np.sign(x) == np.sign(y)) & (x != 0) & (y != 0))
+        nonlinear_df = pd.DataFrame(
+            [
+                {
+                    "metric": "same_sign_rate_all",
+                    "value": (np.sign(x) == np.sign(y)).mean(),
+                },
+                {
+                    "metric": "same_sign_rate_nonzero",
+                    "value": sign_nonzero.mean(),
+                },
+                {
+                    "metric": "mutual_information_terciles",
+                    "value": mutual_information_terciles(x, y),
+                },
+            ]
+        )
+        nonlinear_df.to_csv(OUTPUT_DIR / "nonlinear_cross_product_diagnostics.csv", index=False)
+
         tmp = wide_mids[["day", "timestamp", a, b]].dropna().copy()
         tmp["a_z"] = tmp.groupby("day")[a].transform(lambda s: (s - s.mean()) / (s.std() if s.std() else 1.0))
         tmp["b_z"] = tmp.groupby("day")[b].transform(lambda s: (s - s.mean()) / (s.std() if s.std() else 1.0))
@@ -812,7 +1001,7 @@ flow_df.to_csv(OUTPUT_DIR / "trade_flow_summary.csv")
 # =========================
 # FINAL TEXT SUMMARY
 # =========================
-conclusion_text = build_text_conclusion(summary_df, lead_lag_df, arb_df)
+conclusion_text = build_text_conclusion(summary_df, lead_lag_df, arb_df, all_lag_df, conditional_df)
 (OUTPUT_DIR / "eda_summary.txt").write_text(conclusion_text)
 
 print_header("DONE")

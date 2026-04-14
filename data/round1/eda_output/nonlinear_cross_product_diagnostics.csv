@@ -1,0 +1,4 @@
+metric,value
+same_sign_rate_all,0.33603333333333335
+same_sign_rate_nonzero,0.24046666666666666
+mutual_information_terciles,0.00014589274341847208
