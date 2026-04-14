@@ -1,0 +1,3 @@
+product,n_trades,avg_quantity,median_quantity,buy_aggr_count,sell_aggr_count,mid_count,unknown_count,trade_minus_mid_mean,trade_minus_mid_std
+ASH_COATED_OSMIUM,1265,5.211857707509881,5.0,628,601,36,0,0.14150197628458497,8.078269762921718
+INTARIAN_PEPPER_ROOT,1011,5.1730959446092974,5.0,471,499,41,0,-0.37734915924826906,5.512388504585999
