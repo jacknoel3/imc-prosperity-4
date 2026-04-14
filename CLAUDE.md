@@ -28,9 +28,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | INTARIAN_PEPPER_ROOT | EMA (alpha=0.05), +1000/day trend | 80 | Dynamic FV MM + trend bias → see @.claude/rules/products/intarian_pepper_root.md |
 
 ## Data Findings Summary (Round 1)
-- **ASH_COATED_OSMIUM**: Fixed FV=10000. Strong lag-1 mean-reversion (ACF=-0.495). Imbalance predictive (r=0.38). Behaves like EMERALDS.
-- **INTARIAN_PEPPER_ROOT**: Trends +1000/day linearly. Lag-1 mean-reversion (ACF=-0.501). Imbalance predictive (r=0.385, strengthens at longer lags). NOT a fixed FV product.
-- **Cross-product**: Zero correlation (r=0.016), no lead-lag, z-spread non-stationary. Trade independently — no pairs strategy.
+- **ASH_COATED_OSMIUM**: Near-fixed fair value around 10,000 with stronger local noise than pepper. Strong lag-1 mean-reversion in `Δmid` (ACF=-0.495). Imbalance is predictive (r≈0.38). Best treated as the more classical stationary market-making product.
+- **INTARIAN_PEPPER_ROOT**: Raw price level is not stationary, but the path is highly structured rather than noisy. It rises almost linearly at about +1000/day and about +0.1002 per tick; after removing that linear trend, residual volatility is low. Also shows lag-1 mean-reversion in `Δmid` (ACF=-0.501) and predictive imbalance (r≈0.385, slightly stronger at longer lags). Not fixed-FV, but steady after detrending.
+- **Cross-product**: Same-time correlation is near zero (r≈0.016), exhaustive lag sweeps stay economically weak, and conditional links are exploratory at best. Trade independently — no robust pairs/arbitrage strategy.
 
 ## Manual Challenge: "An Intarian Welcome"
 - Submit a single limit order (price + qty) for each product — you go last, no changes after
