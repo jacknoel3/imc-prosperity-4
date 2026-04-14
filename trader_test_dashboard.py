@@ -78,10 +78,7 @@ class Trader:
         result: Dict[str, List[Order]] = {}
 
         if EMERALDS in state.order_depths:
-            result[EMERALDS] = self._trade_emeralds(
-                state.order_depths[EMERALDS],
-                state.position.get(EMERALDS, 0),
-            )
+            result[EMERALDS] = []
 
         if TOMATOES in state.order_depths:
             tomatoes_orders, tomatoes_ema = self._trade_tomatoes(
@@ -659,4 +656,3 @@ if __name__ == "__main__":
     args = _parse_args()
     summary = export_dashboard_overlay(args.prices, args.trades, args.out)
     print(json.dumps(summary, indent=2))
-
