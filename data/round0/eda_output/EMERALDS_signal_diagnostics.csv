@@ -1,0 +1,6 @@
+,EMERALDS
+"corr(imbalance_l1, fwd_ret_1)",0.6305757233996108
+"corr(imbalance_l1, fwd_ret_5)",0.6358410376679985
+"corr(imbalance_l1, fwd_ret_10)",0.6368689786153849
+"corr(microprice_minus_mid, fwd_ret_1)",0.630575723399598
+"corr(spread, abs(dmid))",-0.6882139063184329
