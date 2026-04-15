@@ -47,6 +47,7 @@ Built-in selectors:
 - indicator overlays
 - optional synced logs
 - PnL and position panels when your own strategy data is available
+- a separate `Synthetic Lab` tab for Monte Carlo-style block-bootstrap scenarios built from the real round 1 tape
 
 ## Strategy Workflow
 
@@ -70,6 +71,13 @@ For custom datasets:
 - optionally upload `Trade CSV`
 - click `Load Uploaded Files`
 - then load the backtest overlay
+
+For synthetic testing:
+
+- open the `Synthetic Lab` tab
+- pick a source window, product, horizon, block length, and seed
+- generate a batch of scenarios
+- either inspect the ensemble in the lab or click `Open Selected In Replay` to move one scenario into the full replay viewer
 
 Optional extras:
 
@@ -148,3 +156,4 @@ Log file:
 - The main chart is canvas-based so it stays responsive on large files.
 - Backtest fills are drawn after the market layers so they stay visible on top of the chart.
 - The PnL panel uses backtest-overlay `pnl` values when present; otherwise it marks strategy fills to mid.
+- The synthetic generator uses contiguous block resampling rather than a single fitted parametric process, so it keeps local book/trade texture while reducing the risk of overfitting to one public day.
