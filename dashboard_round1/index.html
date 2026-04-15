@@ -24,232 +24,387 @@
         </div>
       </header>
 
-      <section class="panel controls-panel">
-        <div class="panel-title-row">
-          <h2>Controls</h2>
-          <p id="dataset-summary" class="panel-caption">Waiting for data...</p>
-        </div>
+      <div class="view-tabs" role="tablist" aria-label="Dashboard views">
+        <button
+          class="tab-button is-active"
+          id="replay-tab-button"
+          type="button"
+          role="tab"
+          aria-selected="true"
+          data-tab-target="replay"
+        >
+          Market Replay
+        </button>
+        <button
+          class="tab-button"
+          id="synthetic-tab-button"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          data-tab-target="synthetic"
+        >
+          Synthetic Lab
+        </button>
+      </div>
 
-        <div class="controls-grid">
-          <label class="field">
-            <span>Dataset</span>
-            <select id="dataset-select"></select>
-          </label>
-
-          <label class="field">
-            <span>Product</span>
-            <select id="product-select"></select>
-          </label>
-
-          <label class="field">
-            <span>Normalize Prices By</span>
-            <select id="normalization-select">
-              <option value="none">Raw price</option>
-              <option value="midPrice">Mid price</option>
-              <option value="wallMid">Wall mid</option>
-            </select>
-          </label>
-
-          <label class="field">
-            <span>Downsample</span>
-            <select id="downsample-select">
-              <option value="1">1x (all rows)</option>
-              <option value="2">2x</option>
-              <option value="5">5x</option>
-              <option value="10">10x</option>
-              <option value="20">20x</option>
-            </select>
-          </label>
-
-          <label class="field">
-            <span>Time Min</span>
-            <input id="time-min-input" type="number" step="100" />
-          </label>
-
-          <label class="field">
-            <span>Time Max</span>
-            <input id="time-max-input" type="number" step="100" />
-          </label>
-
-          <label class="field">
-            <span>Trade Qty Min</span>
-            <input id="trade-min-input" type="number" min="0" step="1" value="0" />
-          </label>
-
-          <label class="field">
-            <span>Trade Qty Max</span>
-            <input id="trade-max-input" type="number" min="0" step="1" value="9999" />
-          </label>
-        </div>
-
-        <div class="controls-actions">
-          <button id="reset-range-button" type="button">Reset Range</button>
-          <label class="toggle-inline">
-            <input id="show-bids-toggle" type="checkbox" checked />
-            <span>Bids</span>
-          </label>
-          <label class="toggle-inline">
-            <input id="show-asks-toggle" type="checkbox" checked />
-            <span>Asks</span>
-          </label>
-          <label class="toggle-inline">
-            <input id="show-market-trades-toggle" type="checkbox" checked />
-            <span>Market Trades</span>
-          </label>
-          <label class="toggle-inline">
-            <input id="show-own-trades-toggle" type="checkbox" checked />
-            <span>Own Trades</span>
-          </label>
-          <label class="toggle-inline">
-            <input id="show-strategy-trades-toggle" type="checkbox" checked />
-            <span>Backtest Trades</span>
-          </label>
-        </div>
-
-        <div class="toggle-sections">
-          <div>
-            <p class="group-label">Order Book Levels</p>
-            <div class="toggle-cluster">
-              <label class="toggle-pill">
-                <input id="level-1-toggle" type="checkbox" checked />
-                <span>L1</span>
-              </label>
-              <label class="toggle-pill">
-                <input id="level-2-toggle" type="checkbox" checked />
-                <span>L2</span>
-              </label>
-              <label class="toggle-pill">
-                <input id="level-3-toggle" type="checkbox" checked />
-                <span>L3</span>
-              </label>
-            </div>
-          </div>
-
-          <div>
-            <p class="group-label">Indicator Overlays</p>
-            <div id="indicator-toggles" class="toggle-cluster"></div>
-          </div>
-
-          <label class="field stretch">
-            <span>Own Trader IDs</span>
-            <input
-              id="own-trader-ids-input"
-              type="text"
-              value="SUBMISSION, OUR_BOT"
-              placeholder="Comma-separated IDs"
-            />
-          </label>
-        </div>
-      </section>
-
-      <main class="dashboard-grid">
-        <section class="panel chart-panel">
+      <section id="replay-tab-panel" class="tab-panel is-active" data-tab-panel="replay">
+        <section class="panel controls-panel">
           <div class="panel-title-row">
-            <h2>Order Book Timeline</h2>
-            <p id="chart-summary" class="panel-caption">Waiting for data...</p>
-          </div>
-          <div id="main-chart-wrapper" class="canvas-shell">
-            <canvas id="main-chart"></canvas>
-            <div id="main-tooltip" class="tooltip hidden"></div>
-          </div>
-          <div id="main-chart-legend" class="chart-legend"></div>
-          <p id="legend-note" class="legend-note"></p>
-        </section>
-
-        <aside class="panel side-panel">
-          <div class="side-section">
-            <div class="panel-title-row">
-              <h2>Snapshot</h2>
-              <p class="panel-caption">Hovered timestamp</p>
-            </div>
-            <div id="snapshot-card" class="text-card"></div>
+            <h2>Controls</h2>
+            <p id="dataset-summary" class="panel-caption">Waiting for data...</p>
           </div>
 
-          <div class="side-section">
-            <div class="panel-title-row">
-              <h2>Stats</h2>
-              <p class="panel-caption">Window summary</p>
-            </div>
-            <div id="stats-card" class="text-card"></div>
-          </div>
-
-          <div class="side-section">
-            <div class="panel-title-row">
-              <h2>Logs</h2>
-              <p class="panel-caption">Optional custom file</p>
-            </div>
-            <div id="log-card" class="text-card"></div>
-          </div>
-        </aside>
-
-        <section class="panel mini-panel">
-          <div class="panel-title-row">
-            <h2>PnL</h2>
-            <p id="pnl-note" class="panel-caption"></p>
-          </div>
-          <div class="canvas-shell mini">
-            <canvas id="pnl-chart"></canvas>
-          </div>
-        </section>
-
-        <section class="panel mini-panel">
-          <div class="panel-title-row">
-            <h2>Position</h2>
-            <p id="position-note" class="panel-caption"></p>
-          </div>
-          <div class="canvas-shell mini">
-            <canvas id="position-chart"></canvas>
-          </div>
-        </section>
-
-        <section class="panel uploads-panel">
-          <div class="panel-title-row">
-            <h2>Custom Inputs</h2>
-            <p class="panel-caption">
-              Load your own backtest export, indicators, or timestamped logs.
-            </p>
-          </div>
-
-          <div class="uploads-grid">
+          <div class="controls-grid">
             <label class="field">
-              <span>Price CSV</span>
-              <input id="upload-price-input" type="file" accept=".csv,.txt" />
+              <span>Dataset</span>
+              <select id="dataset-select"></select>
             </label>
 
             <label class="field">
-              <span>Trade CSV</span>
-              <input id="upload-trade-input" type="file" accept=".csv,.txt" />
+              <span>Product</span>
+              <select id="product-select"></select>
             </label>
 
             <label class="field">
-              <span>Backtest Trades CSV</span>
-              <input id="upload-strategy-trades-input" type="file" accept=".csv,.txt" />
+              <span>Normalize Prices By</span>
+              <select id="normalization-select">
+                <option value="none">Raw price</option>
+                <option value="midPrice">Mid price</option>
+                <option value="wallMid">Wall mid</option>
+              </select>
             </label>
 
             <label class="field">
-              <span>Indicator CSV</span>
-              <input id="upload-indicator-input" type="file" accept=".csv,.txt" />
+              <span>Downsample</span>
+              <select id="downsample-select">
+                <option value="1">1x (all rows)</option>
+                <option value="2">2x</option>
+                <option value="5">5x</option>
+                <option value="10">10x</option>
+                <option value="20">20x</option>
+              </select>
             </label>
 
             <label class="field">
-              <span>Log File</span>
-              <input id="upload-log-input" type="file" accept=".csv,.json,.jsonl,.txt" />
+              <span>Time Min</span>
+              <input id="time-min-input" type="number" step="100" />
+            </label>
+
+            <label class="field">
+              <span>Time Max</span>
+              <input id="time-max-input" type="number" step="100" />
+            </label>
+
+            <label class="field">
+              <span>Trade Qty Min</span>
+              <input id="trade-min-input" type="number" min="0" step="1" value="0" />
+            </label>
+
+            <label class="field">
+              <span>Trade Qty Max</span>
+              <input id="trade-max-input" type="number" min="0" step="1" value="9999" />
             </label>
           </div>
 
           <div class="controls-actions">
-            <button id="load-uploaded-button" type="button">Load Uploaded Files</button>
-            <button id="load-strategy-overlay-button" type="button">Load Backtest Overlay</button>
-            <button id="clear-strategy-overlay-button" type="button">Clear Backtest Overlay</button>
+            <button id="reset-range-button" type="button">Reset Range</button>
+            <label class="toggle-inline">
+              <input id="show-bids-toggle" type="checkbox" checked />
+              <span>Bids</span>
+            </label>
+            <label class="toggle-inline">
+              <input id="show-asks-toggle" type="checkbox" checked />
+              <span>Asks</span>
+            </label>
+            <label class="toggle-inline">
+              <input id="show-market-trades-toggle" type="checkbox" checked />
+              <span>Market Trades</span>
+            </label>
+            <label class="toggle-inline">
+              <input id="show-own-trades-toggle" type="checkbox" checked />
+              <span>Own Trades</span>
+            </label>
+            <label class="toggle-inline">
+              <input id="show-strategy-trades-toggle" type="checkbox" checked />
+              <span>Backtest Trades</span>
+            </label>
+          </div>
+
+          <div class="toggle-sections">
+            <div>
+              <p class="group-label">Order Book Levels</p>
+              <div class="toggle-cluster">
+                <label class="toggle-pill">
+                  <input id="level-1-toggle" type="checkbox" checked />
+                  <span>L1</span>
+                </label>
+                <label class="toggle-pill">
+                  <input id="level-2-toggle" type="checkbox" checked />
+                  <span>L2</span>
+                </label>
+                <label class="toggle-pill">
+                  <input id="level-3-toggle" type="checkbox" checked />
+                  <span>L3</span>
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <p class="group-label">Indicator Overlays</p>
+              <div id="indicator-toggles" class="toggle-cluster"></div>
+            </div>
+
+            <label class="field stretch">
+              <span>Own Trader IDs</span>
+              <input
+                id="own-trader-ids-input"
+                type="text"
+                value="SUBMISSION, OUR_BOT"
+                placeholder="Comma-separated IDs"
+              />
+            </label>
+          </div>
+        </section>
+
+        <main class="dashboard-grid">
+          <section class="panel chart-panel">
+            <div class="panel-title-row">
+              <h2>Order Book Timeline</h2>
+              <p id="chart-summary" class="panel-caption">Waiting for data...</p>
+            </div>
+            <div id="main-chart-wrapper" class="canvas-shell">
+              <canvas id="main-chart"></canvas>
+              <div id="main-tooltip" class="tooltip hidden"></div>
+            </div>
+            <div id="main-chart-legend" class="chart-legend"></div>
+            <p id="legend-note" class="legend-note"></p>
+          </section>
+
+          <aside class="panel side-panel">
+            <div class="side-section">
+              <div class="panel-title-row">
+                <h2>Snapshot</h2>
+                <p class="panel-caption">Hovered timestamp</p>
+              </div>
+              <div id="snapshot-card" class="text-card"></div>
+            </div>
+
+            <div class="side-section">
+              <div class="panel-title-row">
+                <h2>Stats</h2>
+                <p class="panel-caption">Window summary</p>
+              </div>
+              <div id="stats-card" class="text-card"></div>
+            </div>
+
+            <div class="side-section">
+              <div class="panel-title-row">
+                <h2>Logs</h2>
+                <p class="panel-caption">Optional custom file</p>
+              </div>
+              <div id="log-card" class="text-card"></div>
+            </div>
+          </aside>
+
+          <section class="panel mini-panel">
+            <div class="panel-title-row">
+              <h2>PnL</h2>
+              <p id="pnl-note" class="panel-caption"></p>
+            </div>
+            <div id="pnl-chart-wrapper" class="canvas-shell mini">
+              <canvas id="pnl-chart"></canvas>
+              <div id="pnl-tooltip" class="tooltip hidden"></div>
+            </div>
+          </section>
+
+          <section class="panel mini-panel">
+            <div class="panel-title-row">
+              <h2>Position</h2>
+              <p id="position-note" class="panel-caption"></p>
+            </div>
+            <div class="canvas-shell mini">
+              <canvas id="position-chart"></canvas>
+            </div>
+          </section>
+
+          <section class="panel uploads-panel">
+            <div class="panel-title-row">
+              <h2>Custom Inputs</h2>
+              <p class="panel-caption">
+                Load your own backtest export, indicators, or timestamped logs.
+              </p>
+            </div>
+
+            <div class="uploads-grid">
+              <label class="field">
+                <span>Price CSV</span>
+                <input id="upload-price-input" type="file" accept=".csv,.txt" />
+              </label>
+
+              <label class="field">
+                <span>Trade CSV</span>
+                <input id="upload-trade-input" type="file" accept=".csv,.txt" />
+              </label>
+
+              <label class="field">
+                <span>Backtest Trades CSV</span>
+                <input id="upload-strategy-trades-input" type="file" accept=".csv,.txt" />
+              </label>
+
+              <label class="field">
+                <span>Indicator CSV</span>
+                <input id="upload-indicator-input" type="file" accept=".csv,.txt" />
+              </label>
+
+              <label class="field">
+                <span>Log File</span>
+                <input id="upload-log-input" type="file" accept=".csv,.json,.jsonl,.txt" />
+              </label>
+            </div>
+
+            <div class="controls-actions">
+              <button id="load-uploaded-button" type="button">Load Uploaded Files</button>
+              <button id="load-strategy-overlay-button" type="button">Load Backtest Overlay</button>
+              <button id="clear-strategy-overlay-button" type="button">Clear Backtest Overlay</button>
+              <p class="helper-text">
+                Backtest trade format: `timestamp,product,price,quantity,side` with optional
+                `pnl` and `position`. Quantity can also be signed instead of providing `side`.
+                Indicator format: `timestamp,product,name,value`. Log format:
+                `timestamp,product,message` or JSONL with those fields.
+              </p>
+            </div>
+          </section>
+        </main>
+      </section>
+
+      <section id="synthetic-tab-panel" class="tab-panel" data-tab-panel="synthetic">
+        <section class="panel controls-panel">
+          <div class="panel-title-row">
+            <h2>Synthetic Lab</h2>
+            <p id="synthetic-dataset-summary" class="panel-caption">
+              Resample the real Round 1 tape into new market scenarios.
+            </p>
+          </div>
+
+          <div class="controls-grid">
+            <label class="field">
+              <span>Source Window</span>
+              <select id="synthetic-source-select"></select>
+            </label>
+
+            <label class="field">
+              <span>Product</span>
+              <select id="synthetic-product-select"></select>
+            </label>
+
+            <label class="field">
+              <span>Scenario Count</span>
+              <input id="synthetic-scenario-count-input" type="number" min="4" max="96" step="1" value="24" />
+            </label>
+
+            <label class="field">
+              <span>Horizon Rows</span>
+              <input id="synthetic-horizon-input" type="number" min="60" max="5000" step="20" value="600" />
+            </label>
+
+            <label class="field">
+              <span>Block Length</span>
+              <input id="synthetic-block-input" type="number" min="4" max="500" step="1" value="24" />
+            </label>
+
+            <label class="field">
+              <span>Seed</span>
+              <input id="synthetic-seed-input" type="number" min="0" step="1" value="7" />
+            </label>
+          </div>
+
+          <div class="controls-actions">
+            <button id="synthetic-generate-button" type="button">Generate Scenarios</button>
+
+            <label class="field inline-field">
+              <span>Selected Scenario</span>
+              <select id="synthetic-scenario-select"></select>
+            </label>
+
+            <button id="synthetic-load-button" class="button-secondary" type="button">
+              Open Selected In Replay
+            </button>
+            <button id="synthetic-download-prices-button" class="button-secondary" type="button">
+              Download Prices CSV
+            </button>
+            <button id="synthetic-download-trades-button" class="button-secondary" type="button">
+              Download Trades CSV
+            </button>
+
             <p class="helper-text">
-              Backtest trade format: `timestamp,product,price,quantity,side` with optional
-              `pnl` and `position`. Quantity can also be signed instead of providing `side`.
-              Indicator format: `timestamp,product,name,value`. Log format:
-              `timestamp,product,message` or JSONL with those fields.
+              The generator uses block bootstrap resampling: it copies contiguous real market
+              regimes, recenters their book shape around a synthetic mid-price path, and carries
+              the matched trade bursts along. That keeps local behavior realistic without fitting a
+              brittle one-day model.
             </p>
           </div>
         </section>
-      </main>
+
+        <main class="dashboard-grid synthetic-grid">
+          <section class="panel chart-panel">
+            <div class="panel-title-row">
+              <h2>Synthetic Scenario Paths</h2>
+              <p id="synthetic-chart-summary" class="panel-caption">Generate a batch to begin.</p>
+            </div>
+            <div id="synthetic-chart-wrapper" class="canvas-shell">
+              <canvas id="synthetic-chart"></canvas>
+              <div id="synthetic-tooltip" class="tooltip hidden"></div>
+            </div>
+            <p id="synthetic-legend-note" class="legend-note"></p>
+          </section>
+
+          <aside class="panel side-panel synthetic-side-panel">
+            <div class="side-section">
+              <div class="panel-title-row">
+                <h2>Generator</h2>
+                <p class="panel-caption">Source summary</p>
+              </div>
+              <div id="synthetic-source-card" class="text-card"></div>
+            </div>
+
+            <div class="side-section">
+              <div class="panel-title-row">
+                <h2>Scenario</h2>
+                <p class="panel-caption">Selected path</p>
+              </div>
+              <div id="synthetic-selected-card" class="text-card"></div>
+            </div>
+
+            <div class="side-section">
+              <div class="panel-title-row">
+                <h2>Method</h2>
+                <p class="panel-caption">Anti-overfit note</p>
+              </div>
+              <div id="synthetic-method-card" class="text-card"></div>
+            </div>
+          </aside>
+
+          <section class="panel mini-panel">
+            <div class="panel-title-row">
+              <h2>Spread</h2>
+              <p id="synthetic-spread-note" class="panel-caption"></p>
+            </div>
+            <div class="canvas-shell mini">
+              <canvas id="synthetic-spread-chart"></canvas>
+            </div>
+          </section>
+
+          <section class="panel mini-panel">
+            <div class="panel-title-row">
+              <h2>Trade Activity</h2>
+              <p id="synthetic-activity-note" class="panel-caption"></p>
+            </div>
+            <div class="canvas-shell mini">
+              <canvas id="synthetic-activity-chart"></canvas>
+            </div>
+          </section>
+        </main>
+      </section>
     </div>
 
     <script src="app.js"></script>

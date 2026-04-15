@@ -60,9 +60,44 @@ const CUSTOM_LINE_PALETTE = [
   "rgba(118, 104, 57, 0.92)",
 ];
 
+const SYNTHETIC_PRODUCTS = ["ASH_COATED_OSMIUM", "INTARIAN_PEPPER_ROOT"];
+
+const SYNTHETIC_SOURCE_OPTIONS = [
+  {
+    key: "all-days",
+    label: "All Round 1 Days (-2, -1, 0)",
+    datasetKeys: ["round1-day--2", "round1-day--1", "round1-day-0"],
+  },
+  {
+    key: "round1-day--2",
+    label: "Day -2 Only",
+    datasetKeys: ["round1-day--2"],
+  },
+  {
+    key: "round1-day--1",
+    label: "Day -1 Only",
+    datasetKeys: ["round1-day--1"],
+  },
+  {
+    key: "round1-day-0",
+    label: "Day 0 Only",
+    datasetKeys: ["round1-day-0"],
+  },
+];
+
+const SYNTHETIC_METHOD_TEXT = [
+  "approach: block bootstrap rather than curve fitting",
+  "source blocks: contiguous slices from the real Round 1 tapes",
+  "state carried over: mid-price deltas, spread regime, depth offsets, and trade bursts",
+  "re-centering: each borrowed book shape is moved onto a synthetic mid path",
+  "why this helps: local microstructure stays realistic, but the exact day path is no longer memorized",
+  "guardrail: blocks are sampled within a single day so we do not splice across the public day reset",
+].join("\n");
+
 const state = {
   datasets: new Map(),
   activeDatasetKey: BUILTIN_DATASETS[0].key,
+  activeTab: "replay",
   selectedProduct: "",
   normalization: "none",
   downsample: 1,
@@ -74,8 +109,26 @@ const state = {
   visibleLevels: { 1: true, 2: true, 3: true },
   visibleIndicators: new Set(["midPrice", "wallMid"]),
   hoveredTimestamp: null,
+  hoveredPnlTimestamp: null,
   strategyOverlay: null,
   zoomDrag: null,
+  mainPanDrag: null,
+  mainChartYOffset: 0,
+  pnlPanDrag: null,
+  pnlChartYOffset: 0,
+  miniTimeRange: null,
+  syntheticSourceCache: new Map(),
+  syntheticLab: {
+    sourceKey: "all-days",
+    product: "INTARIAN_PEPPER_ROOT",
+    scenarioCount: 24,
+    horizonRows: 600,
+    blockLength: 24,
+    seed: 7,
+    selectedScenarioId: "",
+    generated: null,
+    hoveredTimestamp: null,
+  },
 };
 
 const els = {};
@@ -84,10 +137,15 @@ document.addEventListener("DOMContentLoaded", () => {
   bindElements();
   bindEvents();
   populateDatasetSelect();
+  populateSyntheticSourceSelect();
+  populateSyntheticProductSelect();
+  renderSyntheticLab();
   loadDataset(state.activeDatasetKey);
 });
 
 function bindElements() {
+  els.tabButtons = [...document.querySelectorAll("[data-tab-target]")];
+  els.tabPanels = [...document.querySelectorAll("[data-tab-panel]")];
   els.datasetSelect = document.getElementById("dataset-select");
   els.productSelect = document.getElementById("product-select");
   els.normalizationSelect = document.getElementById("normalization-select");
@@ -119,9 +177,11 @@ function bindElements() {
   els.positionNote = document.getElementById("position-note");
   els.mainChartWrapper = document.getElementById("main-chart-wrapper");
   els.mainChart = document.getElementById("main-chart");
+  els.pnlChartWrapper = document.getElementById("pnl-chart-wrapper");
   els.pnlChart = document.getElementById("pnl-chart");
   els.positionChart = document.getElementById("position-chart");
   els.mainTooltip = document.getElementById("main-tooltip");
+  els.pnlTooltip = document.getElementById("pnl-tooltip");
   els.uploadPriceInput = document.getElementById("upload-price-input");
   els.uploadTradeInput = document.getElementById("upload-trade-input");
   els.uploadStrategyTradesInput = document.getElementById("upload-strategy-trades-input");
@@ -130,9 +190,37 @@ function bindElements() {
   els.loadUploadedButton = document.getElementById("load-uploaded-button");
   els.loadStrategyOverlayButton = document.getElementById("load-strategy-overlay-button");
   els.clearStrategyOverlayButton = document.getElementById("clear-strategy-overlay-button");
+  els.syntheticDatasetSummary = document.getElementById("synthetic-dataset-summary");
+  els.syntheticSourceSelect = document.getElementById("synthetic-source-select");
+  els.syntheticProductSelect = document.getElementById("synthetic-product-select");
+  els.syntheticScenarioCountInput = document.getElementById("synthetic-scenario-count-input");
+  els.syntheticHorizonInput = document.getElementById("synthetic-horizon-input");
+  els.syntheticBlockInput = document.getElementById("synthetic-block-input");
+  els.syntheticSeedInput = document.getElementById("synthetic-seed-input");
+  els.syntheticScenarioSelect = document.getElementById("synthetic-scenario-select");
+  els.syntheticGenerateButton = document.getElementById("synthetic-generate-button");
+  els.syntheticLoadButton = document.getElementById("synthetic-load-button");
+  els.syntheticDownloadPricesButton = document.getElementById("synthetic-download-prices-button");
+  els.syntheticDownloadTradesButton = document.getElementById("synthetic-download-trades-button");
+  els.syntheticChartSummary = document.getElementById("synthetic-chart-summary");
+  els.syntheticLegendNote = document.getElementById("synthetic-legend-note");
+  els.syntheticChartWrapper = document.getElementById("synthetic-chart-wrapper");
+  els.syntheticChart = document.getElementById("synthetic-chart");
+  els.syntheticTooltip = document.getElementById("synthetic-tooltip");
+  els.syntheticSpreadChart = document.getElementById("synthetic-spread-chart");
+  els.syntheticActivityChart = document.getElementById("synthetic-activity-chart");
+  els.syntheticSpreadNote = document.getElementById("synthetic-spread-note");
+  els.syntheticActivityNote = document.getElementById("synthetic-activity-note");
+  els.syntheticSourceCard = document.getElementById("synthetic-source-card");
+  els.syntheticSelectedCard = document.getElementById("synthetic-selected-card");
+  els.syntheticMethodCard = document.getElementById("synthetic-method-card");
 }
 
 function bindEvents() {
+  els.tabButtons.forEach((button) => {
+    button.addEventListener("click", () => switchDashboardTab(button.dataset.tabTarget || "replay"));
+  });
+
   els.datasetSelect.addEventListener("change", async (event) => {
     state.activeDatasetKey = event.target.value;
     state.hoveredTimestamp = null;
@@ -149,6 +237,7 @@ function bindEvents() {
 
   els.normalizationSelect.addEventListener("change", (event) => {
     state.normalization = event.target.value;
+    state.mainChartYOffset = 0;
     renderAll();
   });
 
@@ -157,12 +246,28 @@ function bindEvents() {
     renderAll();
   });
 
-  [els.timeMinInput, els.timeMaxInput, els.tradeMinInput, els.tradeMaxInput].forEach(
-    (input) => input.addEventListener("change", () => renderAll()),
+  [els.timeMinInput, els.timeMaxInput].forEach((input) =>
+    input.addEventListener("change", () => {
+      state.mainChartYOffset = 0;
+      state.hoveredTimestamp = null;
+      state.hoveredPnlTimestamp = null;
+      els.mainTooltip.classList.add("hidden");
+      els.pnlTooltip.classList.add("hidden");
+      renderAll();
+    }),
+  );
+
+  [els.tradeMinInput, els.tradeMaxInput].forEach((input) =>
+    input.addEventListener("change", () => renderAll()),
   );
 
   els.resetRangeButton.addEventListener("click", () => {
-    initializeTimeRange();
+    resetMainTimeRange();
+    state.mainChartYOffset = 0;
+    state.hoveredTimestamp = null;
+    state.hoveredPnlTimestamp = null;
+    els.mainTooltip.classList.add("hidden");
+    els.pnlTooltip.classList.add("hidden");
     renderAll();
   });
 
@@ -226,10 +331,119 @@ function bindEvents() {
     els.mainTooltip.classList.add("hidden");
     renderAll();
   });
+  els.pnlChartWrapper.addEventListener("mousedown", handlePnlChartMouseDown);
+  els.pnlChartWrapper.addEventListener("mousemove", handlePnlChartHover);
+  els.pnlChartWrapper.addEventListener("wheel", handlePnlChartWheel, { passive: false });
+  els.pnlChartWrapper.addEventListener("dblclick", handlePnlChartDoubleClick);
+  els.pnlChartWrapper.addEventListener("mouseleave", () => {
+    if (state.pnlPanDrag) {
+      els.pnlTooltip.classList.add("hidden");
+      return;
+    }
+    state.hoveredPnlTimestamp = null;
+    els.pnlTooltip.classList.add("hidden");
+    renderAll();
+  });
+
+  [
+    els.syntheticSourceSelect,
+    els.syntheticProductSelect,
+    els.syntheticScenarioCountInput,
+    els.syntheticHorizonInput,
+    els.syntheticBlockInput,
+    els.syntheticSeedInput,
+  ].forEach((input) =>
+    input.addEventListener("change", () => {
+      syncSyntheticConfigFromInputs();
+      clearSyntheticResults();
+      renderSyntheticLab();
+    }),
+  );
+
+  els.syntheticScenarioSelect.addEventListener("change", (event) => {
+    state.syntheticLab.selectedScenarioId = event.target.value;
+    state.syntheticLab.hoveredTimestamp = null;
+    els.syntheticTooltip.classList.add("hidden");
+    renderSyntheticLab();
+  });
+
+  els.syntheticGenerateButton.addEventListener("click", () => generateSyntheticScenarios());
+  els.syntheticLoadButton.addEventListener("click", () => loadSelectedSyntheticScenarioIntoReplay());
+  els.syntheticDownloadPricesButton.addEventListener("click", () => downloadSelectedSyntheticScenario("prices"));
+  els.syntheticDownloadTradesButton.addEventListener("click", () => downloadSelectedSyntheticScenario("trades"));
+  els.syntheticChartWrapper.addEventListener("mousemove", handleSyntheticChartHover);
+  els.syntheticChartWrapper.addEventListener("mouseleave", () => {
+    state.syntheticLab.hoveredTimestamp = null;
+    els.syntheticTooltip.classList.add("hidden");
+    renderSyntheticMainChart();
+  });
 
   window.addEventListener("mousemove", handleChartDragMove);
   window.addEventListener("mouseup", handleChartMouseUp);
-  window.addEventListener("resize", () => renderAll());
+  window.addEventListener("resize", () => {
+    if (state.activeTab === "synthetic") {
+      renderSyntheticLab();
+      return;
+    }
+    renderAll();
+  });
+}
+
+function switchDashboardTab(tabKey) {
+  state.activeTab = tabKey === "synthetic" ? "synthetic" : "replay";
+
+  els.tabButtons.forEach((button) => {
+    const isActive = button.dataset.tabTarget === state.activeTab;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-selected", isActive ? "true" : "false");
+  });
+
+  els.tabPanels.forEach((panel) => {
+    panel.classList.toggle("is-active", panel.dataset.tabPanel === state.activeTab);
+  });
+
+  if (state.activeTab === "synthetic") {
+    if (!state.syntheticLab.generated) {
+      generateSyntheticScenarios();
+      return;
+    }
+    renderSyntheticLab();
+    return;
+  }
+
+  renderAll();
+}
+
+function syncSyntheticConfigFromInputs() {
+  state.syntheticLab.sourceKey = els.syntheticSourceSelect.value || state.syntheticLab.sourceKey;
+  state.syntheticLab.product = els.syntheticProductSelect.value || state.syntheticLab.product;
+  state.syntheticLab.scenarioCount = readIntegerInput(els.syntheticScenarioCountInput, 24, 4, 96);
+  state.syntheticLab.horizonRows = readIntegerInput(els.syntheticHorizonInput, 600, 60, 5000);
+  state.syntheticLab.blockLength = readIntegerInput(els.syntheticBlockInput, 24, 4, 500);
+  state.syntheticLab.seed = readIntegerInput(els.syntheticSeedInput, 7, 0, 1000000);
+}
+
+function clearSyntheticResults() {
+  state.syntheticLab.generated = null;
+  state.syntheticLab.selectedScenarioId = "";
+  state.syntheticLab.hoveredTimestamp = null;
+  if (els.syntheticTooltip) {
+    els.syntheticTooltip.classList.add("hidden");
+  }
+}
+
+function populateSyntheticSourceSelect() {
+  els.syntheticSourceSelect.innerHTML = SYNTHETIC_SOURCE_OPTIONS.map(
+    (option) => `<option value="${escapeHtml(option.key)}">${escapeHtml(option.label)}</option>`,
+  ).join("");
+  els.syntheticSourceSelect.value = state.syntheticLab.sourceKey;
+}
+
+function populateSyntheticProductSelect() {
+  els.syntheticProductSelect.innerHTML = SYNTHETIC_PRODUCTS.map(
+    (product) => `<option value="${escapeHtml(product)}">${escapeHtml(product)}</option>`,
+  ).join("");
+  els.syntheticProductSelect.value = state.syntheticLab.product;
 }
 
 async function loadDataset(key) {
@@ -390,10 +604,14 @@ function clearStrategyOverlay() {
 
 function populateDatasetSelect() {
   const options = [...BUILTIN_DATASETS];
-  if (state.datasets.has("uploaded")) {
-    const uploaded = state.datasets.get("uploaded");
-    options.push({ key: "uploaded", label: uploaded.label });
-  }
+  const builtinKeys = new Set(BUILTIN_DATASETS.map((dataset) => dataset.key));
+  const extraDatasets = [...state.datasets.values()]
+    .filter((dataset) => !builtinKeys.has(dataset.key))
+    .sort((left, right) => left.label.localeCompare(right.label));
+
+  extraDatasets.forEach((dataset) => {
+    options.push({ key: dataset.key, label: dataset.label });
+  });
 
   els.datasetSelect.innerHTML = options
     .map((option) => `<option value="${escapeHtml(option.key)}">${escapeHtml(option.label)}</option>`)
@@ -412,6 +630,21 @@ function populateProductSelect(dataset) {
 }
 
 function initializeTimeRange() {
+  resetMainTimeRange();
+  resetMiniTimeRange();
+  state.mainChartYOffset = 0;
+  state.pnlChartYOffset = 0;
+  state.hoveredTimestamp = null;
+  state.hoveredPnlTimestamp = null;
+  if (els.mainTooltip) {
+    els.mainTooltip.classList.add("hidden");
+  }
+  if (els.pnlTooltip) {
+    els.pnlTooltip.classList.add("hidden");
+  }
+}
+
+function resetMainTimeRange() {
   const productData = getActiveProductData();
   if (!productData || !productData.rows.length) {
     return;
@@ -421,6 +654,19 @@ function initializeTimeRange() {
   const lastTimestamp = productData.rows[productData.rows.length - 1].timestamp;
   els.timeMinInput.value = String(firstTimestamp);
   els.timeMaxInput.value = String(lastTimestamp);
+}
+
+function resetMiniTimeRange() {
+  const productData = getActiveProductData();
+  if (!productData || !productData.rows.length) {
+    state.miniTimeRange = null;
+    return;
+  }
+
+  state.miniTimeRange = {
+    min: productData.rows[0].timestamp,
+    max: productData.rows[productData.rows.length - 1].timestamp,
+  };
 }
 
 function renderIndicatorToggles() {
@@ -463,6 +709,925 @@ function renderIndicatorToggles() {
       renderAll();
     });
   });
+}
+
+function renderSyntheticLab() {
+  if (!els.syntheticMethodCard) {
+    return;
+  }
+
+  els.syntheticMethodCard.textContent = SYNTHETIC_METHOD_TEXT;
+
+  if (!state.syntheticLab.generated) {
+    els.syntheticDatasetSummary.textContent = "Resample the real Round 1 tape into new market scenarios.";
+    els.syntheticChartSummary.textContent = "Generate a batch to begin.";
+    els.syntheticLegendNote.textContent =
+      "The lab draws a percentile band plus sample paths from the generated ensemble. Open a scenario in replay when you want to inspect the synthetic order book row by row.";
+    els.syntheticSourceCard.textContent =
+      "No synthetic batch yet.\n\nPick a source window, product, scenario count, horizon, and block length, then generate.";
+    els.syntheticSelectedCard.textContent =
+      "No scenario selected.\n\nOnce a batch is ready, this panel will summarize the chosen path, its spread profile, and trade activity.";
+    els.syntheticSpreadNote.textContent = "Waiting for scenarios";
+    els.syntheticActivityNote.textContent = "Waiting for scenarios";
+    populateSyntheticScenarioSelect();
+    renderSyntheticMainChart();
+    renderSeriesChart(
+      els.syntheticSpreadChart,
+      buildSeriesChartView([]),
+      COLORS.wallMid,
+      "Generate scenarios to inspect synthetic spread regimes.",
+    );
+    renderSeriesChart(
+      els.syntheticActivityChart,
+      buildSeriesChartView([]),
+      COLORS.tradeBuy,
+      "Generate scenarios to inspect synthetic trade bursts.",
+    );
+    return;
+  }
+
+  const generated = state.syntheticLab.generated;
+  const selectedScenario = getSelectedSyntheticScenario();
+  const aggregate = generated.aggregate;
+
+  els.syntheticDatasetSummary.textContent =
+    `${formatInteger(generated.source.rowCount)} source rows, ${formatInteger(generated.source.tradeCount)} trades, ` +
+    `${generated.source.label}, ${generated.source.product}`;
+  els.syntheticChartSummary.textContent =
+    `${formatInteger(generated.scenarios.length)} scenarios, ${formatInteger(generated.config.horizonRows)} rows each`;
+  els.syntheticLegendNote.textContent =
+    "Light lines are individual scenarios, the filled band is the 10th-90th percentile envelope, the dashed line is the median path, and the highlighted line is the selected scenario. This is meant for regime exploration, not for proving a fitted alpha.";
+
+  const sourceLines = [
+    `source: ${generated.source.label}`,
+    `product: ${generated.source.product}`,
+    `source rows: ${formatInteger(generated.source.rowCount)}`,
+    `source trades: ${formatInteger(generated.source.tradeCount)}`,
+    `base step: ${formatInteger(generated.source.stepSize)}`,
+    `tick size: ${formatMaybe(generated.source.tickSize)}`,
+    `anchor mid: ${formatMaybe(generated.source.anchorMid)}`,
+    `scenario count: ${formatInteger(generated.scenarios.length)}`,
+    `horizon rows: ${formatInteger(generated.config.horizonRows)}`,
+    `block length: ${formatInteger(generated.config.blockLength)}`,
+    `seed: ${formatInteger(generated.config.seed)}`,
+    `median final mid: ${formatMaybe(aggregate.finalMidP50)}`,
+    `10-90% final mid: ${formatMaybe(aggregate.finalMidP10)} -> ${formatMaybe(aggregate.finalMidP90)}`,
+  ];
+  els.syntheticSourceCard.textContent = sourceLines.join("\n");
+
+  if (selectedScenario) {
+    const lines = [
+      `scenario: ${selectedScenario.label}`,
+      `rows: ${formatInteger(selectedScenario.pricesRaw.length)}`,
+      `trades: ${formatInteger(selectedScenario.tradeRowsRaw.length)}`,
+      `trade qty: ${formatInteger(selectedScenario.stats.totalTradeQuantity)}`,
+      `start mid: ${formatMaybe(selectedScenario.stats.startMid)}`,
+      `end mid: ${formatMaybe(selectedScenario.stats.endMid)}`,
+      `path change: ${formatMaybe(selectedScenario.stats.pathChange)}`,
+      `realized vol (step): ${formatMaybe(selectedScenario.stats.realizedVol)}`,
+      `avg spread: ${formatMaybe(selectedScenario.stats.avgSpread)}`,
+      `max drawdown: ${formatMaybe(selectedScenario.stats.maxDrawdown)}`,
+      `trades / 100 rows: ${formatMaybe(selectedScenario.stats.tradeDensityPer100)}`,
+      `blocks used: ${formatInteger(selectedScenario.stats.blockCount)}`,
+    ];
+    els.syntheticSelectedCard.textContent = lines.join("\n");
+  } else {
+    els.syntheticSelectedCard.textContent = "No scenario selected.";
+  }
+
+  renderSyntheticMainChart();
+
+  if (selectedScenario) {
+    renderSeriesChart(
+      els.syntheticSpreadChart,
+      buildSeriesChartView(selectedScenario.spreadSeries),
+      COLORS.wallMid,
+      "No spread series available.",
+    );
+    renderSeriesChart(
+      els.syntheticActivityChart,
+      buildSeriesChartView(selectedScenario.activitySeries),
+      COLORS.tradeBuy,
+      "No synthetic trade activity available.",
+    );
+    els.syntheticSpreadNote.textContent =
+      `${formatInteger(selectedScenario.spreadSeries.length)} points, avg ${formatMaybe(selectedScenario.stats.avgSpread)}`;
+    els.syntheticActivityNote.textContent =
+      `${formatInteger(selectedScenario.activitySeries.length)} points, ${formatInteger(selectedScenario.tradeRowsRaw.length)} trades`;
+  }
+}
+
+function populateSyntheticScenarioSelect() {
+  const generated = state.syntheticLab.generated;
+  if (!generated || !generated.scenarios.length) {
+    els.syntheticScenarioSelect.innerHTML = '<option value="">Generate scenarios first</option>';
+    els.syntheticScenarioSelect.value = "";
+    return;
+  }
+
+  els.syntheticScenarioSelect.innerHTML = generated.scenarios
+    .map(
+      (scenario) =>
+        `<option value="${escapeHtml(scenario.id)}">${escapeHtml(
+          `${scenario.label} | end ${formatMaybe(scenario.stats.endMid)} | dd ${formatMaybe(scenario.stats.maxDrawdown)}`,
+        )}</option>`,
+    )
+    .join("");
+
+  if (!generated.scenarios.some((scenario) => scenario.id === state.syntheticLab.selectedScenarioId)) {
+    state.syntheticLab.selectedScenarioId = generated.scenarios[0].id;
+  }
+  els.syntheticScenarioSelect.value = state.syntheticLab.selectedScenarioId;
+}
+
+function getSelectedSyntheticScenario() {
+  const generated = state.syntheticLab.generated;
+  if (!generated) {
+    return null;
+  }
+
+  const scenario = generated.scenarios.find(
+    (candidate) => candidate.id === state.syntheticLab.selectedScenarioId,
+  );
+  return scenario || generated.scenarios[0] || null;
+}
+
+async function generateSyntheticScenarios() {
+  syncSyntheticConfigFromInputs();
+
+  try {
+    setStatus("Generating synthetic scenarios...");
+    const source = await loadSyntheticSourceBundle(
+      state.syntheticLab.sourceKey,
+      state.syntheticLab.product,
+    );
+    const config = {
+      sourceKey: state.syntheticLab.sourceKey,
+      product: state.syntheticLab.product,
+      scenarioCount: state.syntheticLab.scenarioCount,
+      horizonRows: state.syntheticLab.horizonRows,
+      blockLength: Math.min(state.syntheticLab.blockLength, state.syntheticLab.horizonRows),
+      seed: state.syntheticLab.seed,
+    };
+    const rng = createSeededRandom(config.seed);
+    const scenarios = [];
+
+    for (let scenarioIndex = 0; scenarioIndex < config.scenarioCount; scenarioIndex += 1) {
+      scenarios.push(
+        generateSyntheticScenario(source, {
+          scenarioIndex,
+          horizonRows: config.horizonRows,
+          blockLength: config.blockLength,
+          rng,
+        }),
+      );
+    }
+
+    state.syntheticLab.generated = {
+      createdAt: Date.now(),
+      config,
+      source,
+      scenarios,
+      aggregate: buildSyntheticAggregate(scenarios),
+    };
+    state.syntheticLab.selectedScenarioId = scenarios[0]?.id || "";
+    state.syntheticLab.hoveredTimestamp = null;
+    populateSyntheticScenarioSelect();
+    renderSyntheticLab();
+    setStatus(
+      `Generated ${formatInteger(config.scenarioCount)} synthetic ${config.product} scenarios from ${source.label}.`,
+    );
+  } catch (error) {
+    console.error(error);
+    clearSyntheticResults();
+    renderSyntheticLab();
+    setStatus(`Could not generate synthetic scenarios: ${error.message}`);
+  }
+}
+
+function getSyntheticSourceOption(sourceKey) {
+  return SYNTHETIC_SOURCE_OPTIONS.find((option) => option.key === sourceKey) || null;
+}
+
+async function loadSyntheticSourceBundle(sourceKey, product) {
+  const cacheKey = `${sourceKey}::${product}`;
+  if (state.syntheticSourceCache.has(cacheKey)) {
+    return state.syntheticSourceCache.get(cacheKey);
+  }
+
+  const sourceOption = getSyntheticSourceOption(sourceKey);
+  if (!sourceOption) {
+    throw new Error("Synthetic source configuration not found.");
+  }
+
+  const datasets = await Promise.all(sourceOption.datasetKeys.map((key) => ensureDatasetLoaded(key)));
+  const segments = [];
+  const allRows = [];
+  let tradeCount = 0;
+
+  datasets.forEach((dataset) => {
+    const productData = dataset?.products.get(product);
+    if (!productData || !productData.rows.length) {
+      return;
+    }
+
+    const segment = buildSyntheticSegment(dataset, productData);
+    segments.push(segment);
+    allRows.push(...productData.rows);
+    tradeCount += productData.trades.length;
+  });
+
+  if (!segments.length) {
+    throw new Error(`No source rows found for ${product}.`);
+  }
+
+  const mids = allRows.map((row) => row.midPrice).filter((value) => Number.isFinite(value)).sort((a, b) => a - b);
+  const anchorMid = mids.length ? quantileSorted(mids, 0.5) : 0;
+
+  const bundle = {
+    key: cacheKey,
+    label: sourceOption.label,
+    product,
+    segments,
+    rowCount: allRows.length,
+    tradeCount,
+    stepSize: inferSyntheticStepSize(segments),
+    tickSize: inferTickSize(allRows),
+    anchorMid,
+  };
+
+  state.syntheticSourceCache.set(cacheKey, bundle);
+  return bundle;
+}
+
+function buildSyntheticSegment(dataset, productData) {
+  const tradesByTimestamp = groupBy(productData.trades, (trade) => trade.timestamp);
+  const templates = productData.rows.map((row, index) =>
+    buildSyntheticTemplate(
+      productData.rows[index - 1] || null,
+      row,
+      tradesByTimestamp.get(row.timestamp) || [],
+    ),
+  );
+
+  return {
+    key: dataset.key,
+    label: dataset.label,
+    rows: productData.rows,
+    templates,
+  };
+}
+
+function buildSyntheticTemplate(previousRow, row, trades) {
+  const centerPrice = Number.isFinite(row.midPrice) ? row.midPrice : row.wallMid;
+  const previousMid = previousRow && Number.isFinite(previousRow.midPrice) ? previousRow.midPrice : centerPrice;
+  const midDelta =
+    Number.isFinite(centerPrice) && Number.isFinite(previousMid) ? centerPrice - previousMid : 0;
+
+  return {
+    product: row.product,
+    midDelta,
+    bids: row.bids.map((level) => ({
+      level: level.level,
+      offset: level.price - centerPrice,
+      volume: level.volume,
+    })),
+    asks: row.asks.map((level) => ({
+      level: level.level,
+      offset: level.price - centerPrice,
+      volume: level.volume,
+    })),
+    trades: trades.map((trade) => ({
+      offset: trade.price - centerPrice,
+      quantity: trade.quantity,
+      currency: trade.currency || "XIRECS",
+    })),
+  };
+}
+
+function inferSyntheticStepSize(segments) {
+  const diffs = [];
+  segments.forEach((segment) => {
+    for (let index = 1; index < segment.rows.length; index += 1) {
+      const diff = segment.rows[index].timestamp - segment.rows[index - 1].timestamp;
+      if (diff > 0) {
+        diffs.push(diff);
+      }
+    }
+  });
+
+  if (!diffs.length) {
+    return 100;
+  }
+
+  diffs.sort((left, right) => left - right);
+  return quantileSorted(diffs, 0.5);
+}
+
+function inferTickSize(rows) {
+  let best = Infinity;
+  rows.forEach((row) => {
+    const prices = [
+      row.bestBid,
+      row.bestAsk,
+      row.wallBid,
+      row.wallAsk,
+      row.midPrice,
+      row.wallMid,
+    ].filter((value) => Number.isFinite(value));
+    prices.forEach((price) => {
+      const fractional = Math.abs(price - Math.round(price));
+      if (fractional > 1e-6) {
+        best = Math.min(best, fractional);
+      }
+    });
+  });
+
+  if (!Number.isFinite(best)) {
+    return 1;
+  }
+
+  if (Math.abs(best - 0.5) < 1e-6) {
+    return 0.5;
+  }
+
+  return best;
+}
+
+function generateSyntheticScenario(source, options) {
+  const pricesRaw = [];
+  const tradeRowsRaw = [];
+  const midSeries = [];
+  const spreadSeries = [];
+  const activitySeries = [];
+  let currentTimestamp = 0;
+  let currentMid = source.anchorMid;
+  let activeBlock = null;
+  let offsetInBlock = 0;
+  let blockCount = 0;
+
+  for (let stepIndex = 0; stepIndex < options.horizonRows; stepIndex += 1) {
+    if (!activeBlock || offsetInBlock >= activeBlock.length) {
+      activeBlock = sampleSyntheticBlock(source, options.blockLength, options.rng);
+      offsetInBlock = 0;
+      blockCount += 1;
+    }
+
+    const template = activeBlock.segment.templates[activeBlock.startIndex + offsetInBlock];
+    if (stepIndex > 0) {
+      currentMid += template.midDelta;
+    }
+
+    const priceRowRaw = buildSyntheticPriceRowRaw(
+      template,
+      currentTimestamp,
+      currentMid,
+      source.tickSize,
+    );
+    const tradesAtStep = buildSyntheticTradeRowsRaw(
+      template,
+      currentTimestamp,
+      currentMid,
+      source.tickSize,
+    );
+
+    pricesRaw.push(priceRowRaw);
+    tradeRowsRaw.push(...tradesAtStep);
+    midSeries.push({ timestamp: currentTimestamp, value: toNumber(priceRowRaw.mid_price) ?? currentMid });
+    spreadSeries.push({
+      timestamp: currentTimestamp,
+      value: (toNumber(priceRowRaw.ask_price_1) ?? NaN) - (toNumber(priceRowRaw.bid_price_1) ?? NaN),
+    });
+    activitySeries.push({
+      timestamp: currentTimestamp,
+      value: tradesAtStep.reduce((sum, trade) => sum + (trade.quantity || 0), 0),
+    });
+
+    currentTimestamp += source.stepSize;
+    offsetInBlock += 1;
+  }
+
+  const stats = computeSyntheticScenarioStats({
+    midSeries,
+    spreadSeries,
+    activitySeries,
+    tradeRowsRaw,
+    blockCount,
+  });
+
+  return {
+    id: `synthetic-scenario-${options.scenarioIndex + 1}`,
+    label: `Scenario ${options.scenarioIndex + 1}`,
+    pricesRaw,
+    tradeRowsRaw,
+    midSeries,
+    spreadSeries,
+    activitySeries,
+    stats,
+  };
+}
+
+function sampleSyntheticBlock(source, blockLength, rng) {
+  const segment = source.segments[Math.floor(rng() * source.segments.length)];
+  const maxStart = Math.max(0, segment.templates.length - blockLength);
+  const startIndex = maxStart > 0 ? Math.floor(rng() * (maxStart + 1)) : 0;
+  const length = Math.min(blockLength, segment.templates.length - startIndex);
+
+  return { segment, startIndex, length };
+}
+
+function buildSyntheticPriceRowRaw(template, timestamp, centerPrice, tickSize) {
+  const bids = materializeSyntheticSide(template.bids, centerPrice, tickSize);
+  const asks = materializeSyntheticSide(template.asks, centerPrice, tickSize);
+  const safeTick = Math.max(tickSize || 1, 0.5);
+  const bestBid = bids[0]?.price;
+  const bestAsk = asks[0]?.price;
+
+  if (Number.isFinite(bestBid) && Number.isFinite(bestAsk) && bestAsk <= bestBid) {
+    asks[0].price = quantizePrice(bestBid + safeTick, safeTick);
+  }
+
+  const resolvedBestBid = bids[0]?.price;
+  const resolvedBestAsk = asks[0]?.price;
+  const resolvedMid =
+    Number.isFinite(resolvedBestBid) && Number.isFinite(resolvedBestAsk)
+      ? (resolvedBestBid + resolvedBestAsk) / 2
+      : centerPrice;
+
+  const row = {
+    day: 1,
+    timestamp,
+    product: template.product,
+    mid_price: quantizePrice(resolvedMid, safeTick / 2 || safeTick),
+    profit_and_loss: 0,
+  };
+
+  for (let level = 1; level <= 3; level += 1) {
+    const bid = bids[level - 1];
+    const ask = asks[level - 1];
+    row[`bid_price_${level}`] = bid ? bid.price : "";
+    row[`bid_volume_${level}`] = bid ? bid.volume : "";
+    row[`ask_price_${level}`] = ask ? ask.price : "";
+    row[`ask_volume_${level}`] = ask ? ask.volume : "";
+  }
+
+  return row;
+}
+
+function materializeSyntheticSide(levels, centerPrice, tickSize) {
+  return levels
+    .map((level) => ({
+      level: level.level,
+      price: quantizePrice(centerPrice + level.offset, tickSize),
+      volume: Math.max(1, Math.round(level.volume)),
+    }))
+    .filter((level) => Number.isFinite(level.price));
+}
+
+function buildSyntheticTradeRowsRaw(template, timestamp, centerPrice, tickSize) {
+  return template.trades.map((trade) => ({
+    timestamp,
+    buyer: "",
+    seller: "",
+    symbol: template.product,
+    currency: trade.currency || "XIRECS",
+    price: quantizePrice(centerPrice + trade.offset, tickSize),
+    quantity: Math.max(1, Math.round(trade.quantity)),
+  }));
+}
+
+function quantizePrice(value, tickSize) {
+  const safeTick = Number.isFinite(tickSize) && tickSize > 0 ? tickSize : 1;
+  return Math.round(value / safeTick) * safeTick;
+}
+
+function computeSyntheticScenarioStats({ midSeries, spreadSeries, activitySeries, tradeRowsRaw, blockCount }) {
+  const mids = midSeries.map((point) => point.value).filter((value) => Number.isFinite(value));
+  const spreads = spreadSeries.map((point) => point.value).filter((value) => Number.isFinite(value));
+  const deltas = [];
+  for (let index = 1; index < mids.length; index += 1) {
+    deltas.push(mids[index] - mids[index - 1]);
+  }
+
+  const tradeQuantity = activitySeries.reduce((sum, point) => sum + point.value, 0);
+
+  return {
+    startMid: mids[0] ?? NaN,
+    endMid: mids[mids.length - 1] ?? NaN,
+    pathChange:
+      Number.isFinite(mids[0]) && Number.isFinite(mids[mids.length - 1])
+        ? mids[mids.length - 1] - mids[0]
+        : NaN,
+    realizedVol: standardDeviation(deltas),
+    avgSpread: mean(spreads),
+    totalTradeQuantity: tradeQuantity,
+    tradeDensityPer100: midSeries.length ? (tradeRowsRaw.length / midSeries.length) * 100 : NaN,
+    maxDrawdown: computeMaxDrawdown(mids),
+    blockCount,
+  };
+}
+
+function computeMaxDrawdown(values) {
+  let peak = -Infinity;
+  let drawdown = 0;
+  values.forEach((value) => {
+    if (!Number.isFinite(value)) {
+      return;
+    }
+    peak = Math.max(peak, value);
+    drawdown = Math.max(drawdown, peak - value);
+  });
+  return drawdown;
+}
+
+function buildSyntheticAggregate(scenarios) {
+  if (!scenarios.length) {
+    return {
+      bandSeries: [],
+      finalMidP10: NaN,
+      finalMidP50: NaN,
+      finalMidP90: NaN,
+    };
+  }
+
+  const bandSeries = scenarios[0].midSeries.map((point, index) => {
+    const values = scenarios
+      .map((scenario) => scenario.midSeries[index]?.value)
+      .filter((value) => Number.isFinite(value))
+      .sort((left, right) => left - right);
+
+    return {
+      timestamp: point.timestamp,
+      p10: quantileSorted(values, 0.1),
+      p50: quantileSorted(values, 0.5),
+      p90: quantileSorted(values, 0.9),
+    };
+  });
+
+  const finalMids = scenarios
+    .map((scenario) => scenario.stats.endMid)
+    .filter((value) => Number.isFinite(value))
+    .sort((left, right) => left - right);
+
+  return {
+    bandSeries,
+    finalMidP10: quantileSorted(finalMids, 0.1),
+    finalMidP50: quantileSorted(finalMids, 0.5),
+    finalMidP90: quantileSorted(finalMids, 0.9),
+  };
+}
+
+function renderSyntheticMainChart() {
+  const generated = state.syntheticLab.generated;
+  const selectedScenario = getSelectedSyntheticScenario();
+  const prepared = prepareCanvas(els.syntheticChart);
+  const ctx = prepared.ctx;
+  const width = prepared.width;
+  const height = prepared.height;
+  const plot = getSeriesChartPlot(width, height);
+
+  ctx.clearRect(0, 0, width, height);
+
+  if (!generated || !selectedScenario) {
+    renderEmptyCanvasMessage(ctx, width, height, "Generate a synthetic batch to visualize the ensemble.");
+    return;
+  }
+
+  const xMin = selectedScenario.midSeries[0]?.timestamp ?? 0;
+  const xMax = selectedScenario.midSeries[selectedScenario.midSeries.length - 1]?.timestamp ?? 1;
+  const yValues = [
+    ...selectedScenario.midSeries.map((point) => point.value),
+    ...generated.aggregate.bandSeries.flatMap((point) => [point.p10, point.p50, point.p90]),
+  ].filter((value) => Number.isFinite(value));
+
+  let yMin = Math.min(...yValues);
+  let yMax = Math.max(...yValues);
+  if (yMin === yMax) {
+    yMin -= 1;
+    yMax += 1;
+  }
+  const padding = Math.max((yMax - yMin) * 0.08, 1);
+  yMin -= padding;
+  yMax += padding;
+
+  drawGridAndAxes(ctx, plot, xMin, xMax, yMin, yMax);
+
+  ctx.save();
+  clipToPlot(ctx, plot);
+
+  generated.scenarios.forEach((scenario) => {
+    if (scenario.id === selectedScenario.id) {
+      return;
+    }
+    drawSimpleLine(
+      ctx,
+      scenario.midSeries,
+      xMin,
+      xMax,
+      yMin,
+      yMax,
+      plot,
+      "rgba(12, 92, 123, 0.08)",
+      1.1,
+    );
+  });
+
+  drawSyntheticBand(ctx, generated.aggregate.bandSeries, xMin, xMax, yMin, yMax, plot);
+  drawSimpleLine(
+    ctx,
+    generated.aggregate.bandSeries.map((point) => ({ timestamp: point.timestamp, value: point.p50 })),
+    xMin,
+    xMax,
+    yMin,
+    yMax,
+    plot,
+    "rgba(25, 29, 36, 0.72)",
+    1.6,
+    [7, 6],
+  );
+  drawSimpleLine(
+    ctx,
+    selectedScenario.midSeries,
+    xMin,
+    xMax,
+    yMin,
+    yMax,
+    plot,
+    "rgba(12, 92, 123, 1)",
+    2.4,
+  );
+
+  const hoveredPoint = getHoveredSyntheticPoint(selectedScenario);
+  if (hoveredPoint) {
+    const x = scale(hoveredPoint.timestamp, xMin, xMax, plot.left, plot.right);
+    const y = scale(hoveredPoint.value, yMin, yMax, plot.bottom, plot.top);
+    ctx.save();
+    ctx.strokeStyle = "rgba(25, 29, 36, 0.48)";
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    ctx.moveTo(x, plot.top);
+    ctx.lineTo(x, plot.bottom);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "rgba(12, 92, 123, 1)";
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+function drawSimpleLine(ctx, series, xMin, xMax, yMin, yMax, plot, color, lineWidth, dash = []) {
+  if (!series.length) {
+    return;
+  }
+
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lineWidth;
+  if (dash.length) {
+    ctx.setLineDash(dash);
+  }
+  ctx.beginPath();
+  series.forEach((point, index) => {
+    const x = scale(point.timestamp, xMin, xMax, plot.left, plot.right);
+    const y = scale(point.value, yMin, yMax, plot.bottom, plot.top);
+    if (index === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  });
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawSyntheticBand(ctx, bandSeries, xMin, xMax, yMin, yMax, plot) {
+  if (!bandSeries.length) {
+    return;
+  }
+
+  ctx.save();
+  ctx.fillStyle = "rgba(12, 92, 123, 0.12)";
+  ctx.beginPath();
+  bandSeries.forEach((point, index) => {
+    const x = scale(point.timestamp, xMin, xMax, plot.left, plot.right);
+    const y = scale(point.p90, yMin, yMax, plot.bottom, plot.top);
+    if (index === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  });
+  for (let index = bandSeries.length - 1; index >= 0; index -= 1) {
+    const point = bandSeries[index];
+    const x = scale(point.timestamp, xMin, xMax, plot.left, plot.right);
+    const y = scale(point.p10, yMin, yMax, plot.bottom, plot.top);
+    ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function getHoveredSyntheticPoint(selectedScenario) {
+  if (!selectedScenario || state.syntheticLab.hoveredTimestamp == null) {
+    return null;
+  }
+
+  return (
+    selectedScenario.midSeries.find(
+      (point) => point.timestamp === state.syntheticLab.hoveredTimestamp,
+    ) || null
+  );
+}
+
+function handleSyntheticChartHover(event) {
+  const generated = state.syntheticLab.generated;
+  const selectedScenario = getSelectedSyntheticScenario();
+  if (!generated || !selectedScenario || !selectedScenario.midSeries.length) {
+    return;
+  }
+
+  const pointer = getSeriesChartPointer(event, els.syntheticChart);
+  if (!isPointerInsidePlot(pointer)) {
+    state.syntheticLab.hoveredTimestamp = null;
+    els.syntheticTooltip.classList.add("hidden");
+    renderSyntheticMainChart();
+    return;
+  }
+
+  const xMin = selectedScenario.midSeries[0].timestamp;
+  const xMax = selectedScenario.midSeries[selectedScenario.midSeries.length - 1].timestamp;
+  const timestamp = scale(pointer.rawX, pointer.plot.left, pointer.plot.right, xMin, xMax);
+  const point = findNearestRow(selectedScenario.midSeries, timestamp);
+  if (!point) {
+    return;
+  }
+
+  state.syntheticLab.hoveredTimestamp = point.timestamp;
+  renderSyntheticMainChart();
+  showSyntheticTooltip(event, generated, selectedScenario, point);
+}
+
+function showSyntheticTooltip(event, generated, selectedScenario, point) {
+  const bandPoint =
+    generated.aggregate.bandSeries.find((candidate) => candidate.timestamp === point.timestamp) || null;
+  const spreadPoint =
+    selectedScenario.spreadSeries.find((candidate) => candidate.timestamp === point.timestamp) || null;
+  const activityPoint =
+    selectedScenario.activitySeries.find((candidate) => candidate.timestamp === point.timestamp) || null;
+  const tradesAtTimestamp = selectedScenario.tradeRowsRaw.filter(
+    (trade) => trade.timestamp === point.timestamp,
+  ).length;
+
+  const lines = [
+    `t=${formatInteger(point.timestamp)}`,
+    `selected mid=${formatMaybe(point.value)}`,
+    `band p10-p90=${formatMaybe(bandPoint?.p10)} -> ${formatMaybe(bandPoint?.p90)}`,
+    `spread=${formatMaybe(spreadPoint?.value)}`,
+    `trade qty=${formatMaybe(activityPoint?.value)} trades=${formatInteger(tradesAtTimestamp)}`,
+  ];
+
+  els.syntheticTooltip.textContent = lines.join("\n");
+  els.syntheticTooltip.classList.remove("hidden");
+
+  const wrapperRect = els.syntheticChartWrapper.getBoundingClientRect();
+  const maxLeft = Math.max(10, wrapperRect.width - 280);
+  const maxTop = Math.max(10, wrapperRect.height - 110);
+  const left = clampNumber(event.clientX - wrapperRect.left + 10, 10, maxLeft);
+  const top = clampNumber(event.clientY - wrapperRect.top + 10, 10, maxTop);
+  els.syntheticTooltip.style.left = `${left}px`;
+  els.syntheticTooltip.style.top = `${top}px`;
+}
+
+async function loadSelectedSyntheticScenarioIntoReplay() {
+  const generated = state.syntheticLab.generated;
+  const selectedScenario = getSelectedSyntheticScenario();
+  if (!generated || !selectedScenario) {
+    setStatus("Generate and select a synthetic scenario first.");
+    return;
+  }
+
+  const datasetKey = `synthetic-${generated.config.product.toLowerCase()}-${generated.config.seed}-${Date.now()}`;
+  const label = `Synthetic / ${generated.source.product} / ${selectedScenario.label} / seed ${generated.config.seed}`;
+  const dataset = buildDataset({
+    key: datasetKey,
+    label,
+    priceRowsRaw: selectedScenario.pricesRaw,
+    tradeRowsRaw: selectedScenario.tradeRowsRaw,
+    indicatorRowsRaw: [],
+    logRowsRaw: [],
+  });
+
+  state.datasets.set(datasetKey, dataset);
+  state.activeDatasetKey = datasetKey;
+  state.selectedProduct = generated.source.product;
+  state.strategyOverlay = null;
+  if (els.uploadStrategyTradesInput) {
+    els.uploadStrategyTradesInput.value = "";
+  }
+  populateDatasetSelect();
+  els.datasetSelect.value = datasetKey;
+  switchDashboardTab("replay");
+  await loadDataset(datasetKey);
+  setStatus(`Loaded ${selectedScenario.label} into replay as a synthetic dataset.`);
+}
+
+function downloadSelectedSyntheticScenario(kind) {
+  const generated = state.syntheticLab.generated;
+  const selectedScenario = getSelectedSyntheticScenario();
+  if (!generated || !selectedScenario) {
+    setStatus("Generate and select a synthetic scenario first.");
+    return;
+  }
+
+  if (kind === "prices") {
+    const filename = `synthetic_prices_${generated.source.product.toLowerCase()}_${selectedScenario.label.replaceAll(" ", "_").toLowerCase()}.csv`;
+    downloadTextFile(filename, serializeSyntheticPrices(selectedScenario.pricesRaw));
+    setStatus(`Downloaded price tape for ${selectedScenario.label}.`);
+    return;
+  }
+
+  const filename = `synthetic_trades_${generated.source.product.toLowerCase()}_${selectedScenario.label.replaceAll(" ", "_").toLowerCase()}.csv`;
+  downloadTextFile(filename, serializeSyntheticTrades(selectedScenario.tradeRowsRaw));
+  setStatus(`Downloaded trade tape for ${selectedScenario.label}.`);
+}
+
+function serializeSyntheticPrices(rows) {
+  const headers = [
+    "day",
+    "timestamp",
+    "product",
+    "bid_price_1",
+    "bid_volume_1",
+    "bid_price_2",
+    "bid_volume_2",
+    "bid_price_3",
+    "bid_volume_3",
+    "ask_price_1",
+    "ask_volume_1",
+    "ask_price_2",
+    "ask_volume_2",
+    "ask_price_3",
+    "ask_volume_3",
+    "mid_price",
+    "profit_and_loss",
+  ];
+  return serializeDelimitedRows(rows, headers, ";");
+}
+
+function serializeSyntheticTrades(rows) {
+  const headers = ["timestamp", "buyer", "seller", "symbol", "currency", "price", "quantity"];
+  return serializeDelimitedRows(rows, headers, ";");
+}
+
+function serializeDelimitedRows(rows, headers, delimiter) {
+  const lines = [headers.join(delimiter)];
+  rows.forEach((row) => {
+    const values = headers.map((header) => serializeCell(row[header]));
+    lines.push(values.join(delimiter));
+  });
+  return lines.join("\n");
+}
+
+function serializeCell(value) {
+  if (value == null) {
+    return "";
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  const stringValue = String(value);
+  if (stringValue.includes(";") || stringValue.includes(",") || stringValue.includes('"')) {
+    return `"${stringValue.replaceAll('"', '""')}"`;
+  }
+  return stringValue;
+}
+
+function downloadTextFile(filename, text) {
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function renderEmptyCanvasMessage(ctx, width, height, message) {
+  ctx.save();
+  ctx.fillStyle = COLORS.axis;
+  ctx.font = "13px Menlo, Consolas, monospace";
+  ctx.fillText(message, 18, height / 2);
+  ctx.restore();
 }
 
 function renderAll() {
@@ -588,16 +1753,19 @@ function buildView(dataset, productData) {
     filteredRows.forEach((row) => yValues.push(normalizePrice(row, row.midPrice)));
   }
 
-  let yMin = Math.min(...yValues);
-  let yMax = Math.max(...yValues);
-  if (yMin === yMax) {
-    yMin -= 1;
-    yMax += 1;
+  let { min: autoYMin, max: autoYMax } = computeRobustPlotRange(yValues);
+  if (autoYMin === autoYMax) {
+    autoYMin -= 1;
+    autoYMax += 1;
   }
 
-  const padding = Math.max((yMax - yMin) * 0.08, 1);
-  yMin -= padding;
-  yMax += padding;
+  const padding = Math.max((autoYMax - autoYMin) * 0.08, 1);
+  autoYMin -= padding;
+  autoYMax += padding;
+
+  const yOffset = clampVerticalOffset(state.mainChartYOffset, autoYMax - autoYMin);
+  const yMin = autoYMin + yOffset;
+  const yMax = autoYMax + yOffset;
 
   return {
     dataset,
@@ -612,6 +1780,8 @@ function buildView(dataset, productData) {
     visibleStrategyTrades,
     selectedLevels,
     indicatorSeries,
+    autoYMin,
+    autoYMax,
     yMin,
     yMax,
   };
@@ -629,6 +1799,9 @@ function renderMainChart(view = buildView(getActiveDataset(), getActiveProductDa
 
   const xScale = (timestamp) => scale(timestamp, view.rangeMin, view.rangeMax, plot.left, plot.right);
   const yScale = (price) => scale(price, view.yMin, view.yMax, plot.bottom, plot.top);
+
+  ctx.save();
+  clipToPlot(ctx, plot);
 
   if (state.showBids) {
     drawBookPoints(ctx, view.filteredRows, plot, xScale, yScale, "bids", view.selectedLevels, COLORS.bid);
@@ -658,34 +1831,59 @@ function renderMainChart(view = buildView(getActiveDataset(), getActiveProductDa
   if (state.zoomDrag) {
     drawZoomSelection(ctx, plot, state.zoomDrag.startX, state.zoomDrag.currentX);
   }
+
+  ctx.restore();
 }
 
 function renderMiniCharts(view) {
   const pnlSeries = buildPnlSeries(view.productData, view.strategyProduct);
   const positionSeries = buildPositionSeries(view.productData, view.strategyProduct);
+  const miniRange = getMiniVisibleTimeRange(view);
+  const pnlChartView = buildSeriesChartView(pnlSeries, {
+    xMin: miniRange.min,
+    xMax: miniRange.max,
+    yOffset: state.pnlChartYOffset,
+  });
+  const positionChartView = buildSeriesChartView(positionSeries, {
+    xMin: miniRange.min,
+    xMax: miniRange.max,
+  });
+  const hoveredPnlPoint = getHoveredSeriesPoint(pnlChartView, state.hoveredPnlTimestamp);
+
+  if (state.hoveredPnlTimestamp != null && !hoveredPnlPoint) {
+    state.hoveredPnlTimestamp = null;
+    els.pnlTooltip.classList.add("hidden");
+  }
 
   renderSeriesChart(
     els.pnlChart,
-    pnlSeries,
+    pnlChartView,
     COLORS.pnl,
     "No backtest PnL available yet. Load a backtest overlay or own trades to populate this panel.",
+    { hoveredPoint: hoveredPnlPoint },
   );
 
   renderSeriesChart(
     els.positionChart,
-    positionSeries,
+    positionChartView,
     COLORS.position,
     "No strategy position data yet. Load a backtest overlay or set your trader ID in the trade export.",
   );
 
   if (pnlSeries.length) {
-    els.pnlNote.textContent = `${formatInteger(pnlSeries.length)} points`;
+    const windowLabel = pnlChartView.visibleSeries.length
+      ? `${formatInteger(pnlChartView.visibleSeries.length)} visible`
+      : "No visible points";
+    els.pnlNote.textContent = `${formatInteger(pnlSeries.length)} points, ${windowLabel}`;
   } else {
     els.pnlNote.textContent = "Waiting for strategy data";
   }
 
   if (positionSeries.length) {
-    els.positionNote.textContent = `${formatInteger(positionSeries.length)} points`;
+    const windowLabel = positionChartView.visibleSeries.length
+      ? `${formatInteger(positionChartView.visibleSeries.length)} visible`
+      : "No visible points";
+    els.positionNote.textContent = `${formatInteger(positionSeries.length)} points, ${windowLabel}`;
   } else {
     els.positionNote.textContent = "Waiting for own trades";
   }
@@ -791,6 +1989,10 @@ function handleChartHover(event) {
     updateZoomDrag(event);
     return;
   }
+  if (state.mainPanDrag) {
+    updateMainPanDrag(event);
+    return;
+  }
 
   const view = buildView(getActiveDataset(), getActiveProductData());
   if (!view.filteredRows.length) {
@@ -798,11 +2000,7 @@ function handleChartHover(event) {
   }
 
   const pointer = getChartPointer(event);
-  const x = pointer.rawX;
-  const plotLeft = pointer.plot.left;
-  const plotRight = pointer.plot.right;
-
-  if (x < plotLeft || x > plotRight) {
+  if (!isPointerInsidePlot(pointer)) {
     state.hoveredTimestamp = null;
     els.mainTooltip.classList.add("hidden");
     updateSnapshotAndLogCards(view, view.filteredRows[0] || null);
@@ -810,7 +2008,7 @@ function handleChartHover(event) {
     return;
   }
 
-  const timestamp = scale(x, plotLeft, plotRight, view.rangeMin, view.rangeMax);
+  const timestamp = scale(pointer.rawX, pointer.plot.left, pointer.plot.right, view.rangeMin, view.rangeMax);
   const row = findNearestRow(view.filteredRows, timestamp);
   if (!row) {
     return;
@@ -869,63 +2067,115 @@ function handleChartMouseDown(event) {
   }
 
   const pointer = getChartPointer(event);
-  if (
-    pointer.rawX < pointer.plot.left ||
-    pointer.rawX > pointer.plot.right ||
-    pointer.rawY < pointer.plot.top ||
-    pointer.rawY > pointer.plot.bottom
-  ) {
+  if (!isPointerInsidePlot(pointer)) {
     return;
   }
 
-  state.zoomDrag = {
-    startX: pointer.clampedX,
-    currentX: pointer.clampedX,
-  };
   state.hoveredTimestamp = null;
+  state.hoveredPnlTimestamp = null;
   els.mainTooltip.classList.add("hidden");
-  els.mainChartWrapper.classList.add("is-zooming");
-  renderMainChart(view);
+  els.pnlTooltip.classList.add("hidden");
+
+  if (event.shiftKey) {
+    state.zoomDrag = {
+      startX: pointer.clampedX,
+      currentX: pointer.clampedX,
+    };
+    els.mainChartWrapper.classList.add("is-zooming");
+    renderMainChart(view);
+  } else {
+    state.mainPanDrag = {
+      startX: pointer.clampedX,
+      startY: pointer.clampedY,
+      initialRangeMin: view.rangeMin,
+      initialRangeMax: view.rangeMax,
+      initialYSpan: view.yMax - view.yMin,
+      initialYOffset: state.mainChartYOffset,
+      fullMin: view.fullMin,
+      fullMax: view.fullMax,
+      productData: view.productData,
+      plot: pointer.plot,
+    };
+    els.mainChartWrapper.classList.add("is-panning");
+  }
+
   event.preventDefault();
 }
 
 function handleChartDragMove(event) {
-  if (!state.zoomDrag) {
+  if (state.zoomDrag) {
+    updateZoomDrag(event);
     return;
   }
 
-  updateZoomDrag(event);
+  if (state.mainPanDrag) {
+    updateMainPanDrag(event);
+    return;
+  }
+
+  if (state.pnlPanDrag) {
+    updatePnlPanDrag(event);
+  }
 }
 
 function handleChartMouseUp(event) {
-  if (!state.zoomDrag) {
+  if (state.zoomDrag) {
+    const view = buildView(getActiveDataset(), getActiveProductData());
+    updateZoomDrag(event);
+
+    const pointer = getChartPointer(event);
+    const startX = state.zoomDrag.startX;
+    const endX = pointer.clampedX;
+    const pixelWidth = Math.abs(endX - startX);
+
+    state.zoomDrag = null;
+    els.mainChartWrapper.classList.remove("is-zooming");
+
+    if (pixelWidth < 8) {
+      renderMainChart(view);
+      return;
+    }
+
+    const dragMinX = Math.min(startX, endX);
+    const dragMaxX = Math.max(startX, endX);
+    const nextMin = scale(dragMinX, pointer.plot.left, pointer.plot.right, view.rangeMin, view.rangeMax);
+    const nextMax = scale(dragMaxX, pointer.plot.left, pointer.plot.right, view.rangeMin, view.rangeMax);
+    setVisibleTimeRange(nextMin, nextMax, view);
+    state.mainChartYOffset = 0;
+    state.hoveredTimestamp = null;
+    state.hoveredPnlTimestamp = null;
+    els.pnlTooltip.classList.add("hidden");
+    renderAll();
+    setStatus(`Zoomed to ${formatInteger(nextMin)} -> ${formatInteger(nextMax)}.`);
     return;
   }
 
-  const view = buildView(getActiveDataset(), getActiveProductData());
-  updateZoomDrag(event);
+  if (state.mainPanDrag) {
+    const drag = state.mainPanDrag;
+    updateMainPanDrag(event);
+    state.mainPanDrag = null;
+    els.mainChartWrapper.classList.remove("is-panning");
 
-  const pointer = getChartPointer(event);
-  const startX = state.zoomDrag.startX;
-  const endX = pointer.clampedX;
-  const pixelWidth = Math.abs(endX - startX);
-
-  state.zoomDrag = null;
-  els.mainChartWrapper.classList.remove("is-zooming");
-
-  if (pixelWidth < 8) {
-    renderMainChart(view);
+    const pointer = getChartPointer(event);
+    const movement = Math.abs(pointer.clampedX - drag.startX) + Math.abs(pointer.clampedY - drag.startY);
+    if (movement < 4) {
+      handleChartHover(event);
+    }
     return;
   }
 
-  const dragMinX = Math.min(startX, endX);
-  const dragMaxX = Math.max(startX, endX);
-  const nextMin = scale(dragMinX, pointer.plot.left, pointer.plot.right, view.rangeMin, view.rangeMax);
-  const nextMax = scale(dragMaxX, pointer.plot.left, pointer.plot.right, view.rangeMin, view.rangeMax);
-  setVisibleTimeRange(nextMin, nextMax, view);
-  state.hoveredTimestamp = null;
-  renderAll();
-  setStatus(`Zoomed to ${formatInteger(nextMin)} -> ${formatInteger(nextMax)}.`);
+  if (state.pnlPanDrag) {
+    const drag = state.pnlPanDrag;
+    updatePnlPanDrag(event);
+    state.pnlPanDrag = null;
+    els.pnlChartWrapper.classList.remove("is-panning");
+
+    const pointer = getSeriesChartPointer(event, els.pnlChart);
+    const movement = Math.abs(pointer.clampedX - drag.startX) + Math.abs(pointer.clampedY - drag.startY);
+    if (movement < 4) {
+      handlePnlChartHover(event);
+    }
+  }
 }
 
 function handleChartWheel(event) {
@@ -935,57 +2185,31 @@ function handleChartWheel(event) {
   }
 
   const pointer = getChartPointer(event);
-  if (
-    pointer.rawX < pointer.plot.left ||
-    pointer.rawX > pointer.plot.right ||
-    pointer.rawY < pointer.plot.top ||
-    pointer.rawY > pointer.plot.bottom
-  ) {
+  if (!isPointerInsidePlot(pointer)) {
     return;
   }
 
   event.preventDefault();
-
-  const fullSpan = view.fullMax - view.fullMin;
-  const currentSpan = view.rangeMax - view.rangeMin;
-  const minimumSpan = Math.max(getBaseTimeStep(view.productData.rows) * 8, 200);
-  const zoomFactor = event.deltaY < 0 ? 0.82 : 1.22;
-  const nextSpan = clampNumber(currentSpan * zoomFactor, minimumSpan, fullSpan);
-
-  if (Math.abs(nextSpan - currentSpan) < 1) {
-    return;
-  }
-
-  const pivotTimestamp = scale(
-    pointer.clampedX,
-    pointer.plot.left,
-    pointer.plot.right,
-    view.rangeMin,
-    view.rangeMax,
-  );
-  const pivotRatio = (pointer.clampedX - pointer.plot.left) / Math.max(1, pointer.plot.right - pointer.plot.left);
-
-  let nextMin = pivotTimestamp - pivotRatio * nextSpan;
-  let nextMax = nextMin + nextSpan;
-
-  if (nextMin < view.fullMin) {
-    nextMax += view.fullMin - nextMin;
-    nextMin = view.fullMin;
-  }
-  if (nextMax > view.fullMax) {
-    nextMin -= nextMax - view.fullMax;
-    nextMax = view.fullMax;
-  }
-
-  setVisibleTimeRange(nextMin, nextMax, view);
+  zoomTimeRangeAtPointer(view, pointer, event.deltaY);
+  state.mainChartYOffset = 0;
   state.hoveredTimestamp = null;
+  state.hoveredPnlTimestamp = null;
+  els.mainTooltip.classList.add("hidden");
+  els.pnlTooltip.classList.add("hidden");
   renderAll();
 }
 
 function handleChartDoubleClick() {
   state.zoomDrag = null;
+  state.mainPanDrag = null;
+  resetMainTimeRange();
+  state.mainChartYOffset = 0;
+  state.hoveredTimestamp = null;
+  state.hoveredPnlTimestamp = null;
   els.mainChartWrapper.classList.remove("is-zooming");
-  initializeTimeRange();
+  els.mainChartWrapper.classList.remove("is-panning");
+  els.mainTooltip.classList.add("hidden");
+  els.pnlTooltip.classList.add("hidden");
   renderAll();
   setStatus("Reset chart zoom.");
 }
@@ -1001,6 +2225,191 @@ function updateZoomDrag(event) {
   renderMainChart(buildView(getActiveDataset(), getActiveProductData()));
 }
 
+function updateMainPanDrag(event) {
+  if (!state.mainPanDrag) {
+    return;
+  }
+
+  const drag = state.mainPanDrag;
+  const pointer = getChartPointer(event);
+  const plotWidth = Math.max(1, drag.plot.right - drag.plot.left);
+  const plotHeight = Math.max(1, drag.plot.bottom - drag.plot.top);
+  const xSpan = drag.initialRangeMax - drag.initialRangeMin;
+  const ySpan = drag.initialYSpan;
+  const deltaX = pointer.clampedX - drag.startX;
+  const deltaY = pointer.clampedY - drag.startY;
+  const shiftedRange = buildShiftedTimeRange(
+    drag.initialRangeMin,
+    drag.initialRangeMax,
+    -(deltaX / plotWidth) * xSpan,
+    drag.fullMin,
+    drag.fullMax,
+  );
+
+  setVisibleTimeRange(shiftedRange.min, shiftedRange.max, drag);
+  state.mainChartYOffset = drag.initialYOffset + (deltaY / plotHeight) * ySpan;
+  renderAll();
+}
+
+function handlePnlChartHover(event) {
+  if (state.pnlPanDrag) {
+    updatePnlPanDrag(event);
+    return;
+  }
+
+  const chartContext = buildPnlChartContext();
+  if (!chartContext) {
+    return;
+  }
+  if (!chartContext.chartView.visibleSeries.length) {
+    state.hoveredPnlTimestamp = null;
+    els.pnlTooltip.classList.add("hidden");
+    renderMiniCharts(chartContext.view);
+    return;
+  }
+
+  const pointer = getSeriesChartPointer(event, els.pnlChart);
+  if (!isPointerInsidePlot(pointer)) {
+    state.hoveredPnlTimestamp = null;
+    els.pnlTooltip.classList.add("hidden");
+    renderMiniCharts(chartContext.view);
+    return;
+  }
+
+  const timestamp = scale(
+    pointer.rawX,
+    pointer.plot.left,
+    pointer.plot.right,
+    chartContext.chartView.xMin,
+    chartContext.chartView.xMax,
+  );
+  const point = findNearestRow(chartContext.chartView.visibleSeries, timestamp);
+  if (!point) {
+    return;
+  }
+
+  state.hoveredPnlTimestamp = point.timestamp;
+  renderMiniCharts(chartContext.view);
+  showPnlTooltip(event, point);
+}
+
+function showPnlTooltip(event, point) {
+  const lines = [
+    `t=${formatInteger(point.timestamp)}`,
+    `profit=${formatMaybe(point.value)}`,
+  ];
+
+  els.pnlTooltip.textContent = lines.join("\n");
+  els.pnlTooltip.classList.remove("hidden");
+
+  const wrapperRect = els.pnlChartWrapper.getBoundingClientRect();
+  const maxLeft = Math.max(10, wrapperRect.width - 220);
+  const maxTop = Math.max(10, wrapperRect.height - 96);
+  const left = clampNumber(event.clientX - wrapperRect.left + 10, 10, maxLeft);
+  const top = clampNumber(event.clientY - wrapperRect.top + 10, 10, maxTop);
+  els.pnlTooltip.style.left = `${left}px`;
+  els.pnlTooltip.style.top = `${top}px`;
+}
+
+function handlePnlChartMouseDown(event) {
+  if (event.button !== 0) {
+    return;
+  }
+
+  const chartContext = buildPnlChartContext();
+  if (!chartContext || !chartContext.chartView.series.length) {
+    return;
+  }
+
+  const pointer = getSeriesChartPointer(event, els.pnlChart);
+  if (!isPointerInsidePlot(pointer)) {
+    return;
+  }
+
+  state.hoveredPnlTimestamp = null;
+  state.hoveredTimestamp = null;
+  els.mainTooltip.classList.add("hidden");
+  els.pnlTooltip.classList.add("hidden");
+  state.pnlPanDrag = {
+    startX: pointer.clampedX,
+    startY: pointer.clampedY,
+    initialRangeMin: chartContext.chartView.xMin,
+    initialRangeMax: chartContext.chartView.xMax,
+    initialYSpan: chartContext.chartView.yMax - chartContext.chartView.yMin,
+    initialYOffset: state.pnlChartYOffset,
+    fullMin: chartContext.view.fullMin,
+    fullMax: chartContext.view.fullMax,
+    productData: chartContext.view.productData,
+    plot: pointer.plot,
+  };
+  els.pnlChartWrapper.classList.add("is-panning");
+  event.preventDefault();
+}
+
+function updatePnlPanDrag(event) {
+  if (!state.pnlPanDrag) {
+    return;
+  }
+
+  const drag = state.pnlPanDrag;
+  const pointer = getSeriesChartPointer(event, els.pnlChart);
+  const plotWidth = Math.max(1, drag.plot.right - drag.plot.left);
+  const plotHeight = Math.max(1, drag.plot.bottom - drag.plot.top);
+  const xSpan = drag.initialRangeMax - drag.initialRangeMin;
+  const ySpan = drag.initialYSpan;
+  const deltaX = pointer.clampedX - drag.startX;
+  const deltaY = pointer.clampedY - drag.startY;
+  const shiftedRange = buildShiftedTimeRange(
+    drag.initialRangeMin,
+    drag.initialRangeMax,
+    -(deltaX / plotWidth) * xSpan,
+    drag.fullMin,
+    drag.fullMax,
+  );
+
+  setVisibleTimeRange(shiftedRange.min, shiftedRange.max, drag, "mini");
+  state.pnlChartYOffset = drag.initialYOffset + (deltaY / plotHeight) * ySpan;
+  renderAll();
+}
+
+function handlePnlChartWheel(event) {
+  const chartContext = buildPnlChartContext();
+  if (!chartContext || !chartContext.chartView.series.length) {
+    return;
+  }
+
+  const pointer = getSeriesChartPointer(event, els.pnlChart);
+  if (!isPointerInsidePlot(pointer)) {
+    return;
+  }
+
+  event.preventDefault();
+  zoomTimeRangeAtPointer(chartContext.view, pointer, event.deltaY, {
+    rangeMin: chartContext.chartView.xMin,
+    rangeMax: chartContext.chartView.xMax,
+    target: "mini",
+  });
+  state.pnlChartYOffset = 0;
+  state.hoveredPnlTimestamp = null;
+  state.hoveredTimestamp = null;
+  els.mainTooltip.classList.add("hidden");
+  els.pnlTooltip.classList.add("hidden");
+  renderAll();
+}
+
+function handlePnlChartDoubleClick() {
+  state.pnlPanDrag = null;
+  resetMiniTimeRange();
+  state.pnlChartYOffset = 0;
+  state.hoveredPnlTimestamp = null;
+  state.hoveredTimestamp = null;
+  els.pnlChartWrapper.classList.remove("is-panning");
+  els.mainTooltip.classList.add("hidden");
+  els.pnlTooltip.classList.add("hidden");
+  renderAll();
+  setStatus("Reset PnL view.");
+}
+
 function getChartPointer(event) {
   const rect = els.mainChart.getBoundingClientRect();
   const plot = getChartPlot(rect.width, rect.height);
@@ -1012,11 +2421,132 @@ function getChartPointer(event) {
     rawX,
     rawY,
     clampedX: clampNumber(rawX, plot.left, plot.right),
+    clampedY: clampNumber(rawY, plot.top, plot.bottom),
   };
 }
 
 function getChartPlot(width, height) {
   return { left: 66, top: 20, right: width - 24, bottom: height - 38 };
+}
+
+function getSeriesChartPointer(event, canvas) {
+  const rect = canvas.getBoundingClientRect();
+  const plot = getSeriesChartPlot(rect.width, rect.height);
+  const rawX = event.clientX - rect.left;
+  const rawY = event.clientY - rect.top;
+
+  return {
+    plot,
+    rawX,
+    rawY,
+    clampedX: clampNumber(rawX, plot.left, plot.right),
+    clampedY: clampNumber(rawY, plot.top, plot.bottom),
+  };
+}
+
+function getSeriesChartPlot(width, height) {
+  return { left: 62, top: 20, right: width - 24, bottom: height - 36 };
+}
+
+function isPointerInsidePlot(pointer) {
+  return (
+    pointer.rawX >= pointer.plot.left &&
+    pointer.rawX <= pointer.plot.right &&
+    pointer.rawY >= pointer.plot.top &&
+    pointer.rawY <= pointer.plot.bottom
+  );
+}
+
+function buildPnlChartContext() {
+  const dataset = getActiveDataset();
+  const productData = getActiveProductData();
+  if (!dataset || !productData) {
+    return null;
+  }
+
+  const view = buildView(dataset, productData);
+  const miniRange = getMiniVisibleTimeRange(view);
+  const series = buildPnlSeries(view.productData, view.strategyProduct);
+  const chartView = buildSeriesChartView(series, {
+    xMin: miniRange.min,
+    xMax: miniRange.max,
+    yOffset: state.pnlChartYOffset,
+  });
+
+  return { view, chartView };
+}
+
+function getMiniVisibleTimeRange(view) {
+  let rangeMin = state.miniTimeRange?.min;
+  let rangeMax = state.miniTimeRange?.max;
+
+  rangeMin = rangeMin == null ? view.fullMin : clampNumber(rangeMin, view.fullMin, view.fullMax);
+  rangeMax = rangeMax == null ? view.fullMax : clampNumber(rangeMax, view.fullMin, view.fullMax);
+
+  if (rangeMin > rangeMax) {
+    [rangeMin, rangeMax] = [rangeMax, rangeMin];
+  }
+
+  return { min: rangeMin, max: rangeMax };
+}
+
+function buildShiftedTimeRange(rangeMin, rangeMax, delta, fullMin, fullMax) {
+  const span = rangeMax - rangeMin;
+  if (span >= fullMax - fullMin) {
+    return { min: fullMin, max: fullMax };
+  }
+
+  let nextMin = rangeMin + delta;
+  let nextMax = rangeMax + delta;
+
+  if (nextMin < fullMin) {
+    nextMax += fullMin - nextMin;
+    nextMin = fullMin;
+  }
+  if (nextMax > fullMax) {
+    nextMin -= nextMax - fullMax;
+    nextMax = fullMax;
+  }
+
+  return { min: nextMin, max: nextMax };
+}
+
+function zoomTimeRangeAtPointer(view, pointer, deltaY, options = {}) {
+  const rangeMin = options.rangeMin ?? view.rangeMin;
+  const rangeMax = options.rangeMax ?? view.rangeMax;
+  const target = options.target ?? "main";
+  const fullSpan = view.fullMax - view.fullMin;
+  const currentSpan = rangeMax - rangeMin;
+  const minimumSpan = Math.max(getBaseTimeStep(view.productData.rows) * 8, 200);
+  const zoomFactor = deltaY < 0 ? 0.82 : 1.22;
+  const nextSpan = clampNumber(currentSpan * zoomFactor, minimumSpan, fullSpan);
+
+  if (Math.abs(nextSpan - currentSpan) < 1) {
+    return;
+  }
+
+  const pivotTimestamp = scale(
+    pointer.clampedX,
+    pointer.plot.left,
+    pointer.plot.right,
+    rangeMin,
+    rangeMax,
+  );
+  const pivotRatio = (pointer.clampedX - pointer.plot.left) / Math.max(1, pointer.plot.right - pointer.plot.left);
+
+  let nextMin = pivotTimestamp - pivotRatio * nextSpan;
+  let nextMax = nextMin + nextSpan;
+
+  if (nextMin < view.fullMin) {
+    nextMax += view.fullMin - nextMin;
+    nextMin = view.fullMin;
+  }
+  if (nextMax > view.fullMax) {
+    nextMin -= nextMax - view.fullMax;
+    nextMax = view.fullMax;
+  }
+
+  setVisibleTimeRange(nextMin, nextMax, view, target);
 }
 
 function drawZoomSelection(ctx, plot, startX, currentX) {
@@ -1033,7 +2563,7 @@ function drawZoomSelection(ctx, plot, startX, currentX) {
   ctx.restore();
 }
 
-function setVisibleTimeRange(rawMin, rawMax, view) {
+function setVisibleTimeRange(rawMin, rawMax, view, target = "main") {
   const step = getBaseTimeStep(view.productData.rows);
   const minimumSpan = Math.max(step * 4, 200);
   let nextMin = snapToStep(rawMin, step);
@@ -1066,6 +2596,14 @@ function setVisibleTimeRange(rawMin, rawMax, view) {
 
   if (nextMax <= nextMin) {
     nextMax = Math.min(view.fullMax, nextMin + minimumSpan);
+  }
+
+  if (target === "mini") {
+    state.miniTimeRange = {
+      min: Math.round(nextMin),
+      max: Math.round(nextMax),
+    };
+    return;
   }
 
   els.timeMinInput.value = String(Math.round(nextMin));
@@ -1252,7 +2790,7 @@ function renderLegend(view) {
     overlayLabel = `Backtest overlay loaded: ${state.strategyOverlay.label}. Strategy fills are drawn last so they sit on top of the market plot.`;
   }
 
-  els.legendNote.textContent = `${normalizationLabel} Visible book levels: ${levelsLabel}. Quote dot size scales with quoted volume. Market trade direction is inferred from price vs. the current book unless the trade matches one of your trader IDs. Use the mouse wheel to zoom, drag across the chart to zoom into a window, and double-click to reset. ${overlayLabel}`;
+  els.legendNote.textContent = `${normalizationLabel} Visible book levels: ${levelsLabel}. Quote dot size scales with quoted volume. Market trade direction is inferred from price vs. the current book unless the trade matches one of your trader IDs. Drag to pan, hold Shift while dragging to zoom into a window, use the mouse wheel to zoom, zoom actions recenter vertically, isolated price spikes are de-emphasized in auto-fit until you zoom close to them, and double-click to reset. ${overlayLabel}`;
 }
 
 function drawTrades(ctx, trades, xScale, yScale, productData) {
@@ -1379,45 +2917,108 @@ function drawLegendDiamond(color) {
   return `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><polygon points="8,1 15,8 8,15 1,8" fill="${color}" stroke="rgba(25, 29, 36, 0.95)" stroke-width="1.25"></polygon></svg>`;
 }
 
-function renderSeriesChart(canvas, series, color, emptyMessage) {
+function buildSeriesChartView(series, options = {}) {
+  if (!series.length) {
+    return {
+      series,
+      visibleSeries: [],
+      fullMin: 0,
+      fullMax: 0,
+      xMin: 0,
+      xMax: 1,
+      autoYMin: -1,
+      autoYMax: 1,
+      yMin: -1,
+      yMax: 1,
+    };
+  }
+
+  const fullMin = series[0].timestamp;
+  const fullMax = series[series.length - 1].timestamp;
+  let xMin = options.xMin == null ? fullMin : options.xMin;
+  let xMax = options.xMax == null ? fullMax : options.xMax;
+
+  if (xMin > xMax) {
+    [xMin, xMax] = [xMax, xMin];
+  }
+
+  const visibleSeries = series.filter((point) => point.timestamp >= xMin && point.timestamp <= xMax);
+  const ySource = visibleSeries.length ? visibleSeries : series;
+  const values = ySource.map((point) => point.value);
+  let autoYMin = Math.min(...values);
+  let autoYMax = Math.max(...values);
+  if (autoYMin === autoYMax) {
+    autoYMin -= 1;
+    autoYMax += 1;
+  }
+
+  const yPadding = Math.max((autoYMax - autoYMin) * 0.1, 1);
+  autoYMin -= yPadding;
+  autoYMax += yPadding;
+
+  const yOffset = clampVerticalOffset(options.yOffset ?? 0, autoYMax - autoYMin);
+  const yMin = autoYMin + yOffset;
+  const yMax = autoYMax + yOffset;
+
+  return {
+    series,
+    visibleSeries,
+    fullMin,
+    fullMax,
+    xMin,
+    xMax,
+    autoYMin,
+    autoYMax,
+    yMin,
+    yMax,
+  };
+}
+
+function getHoveredSeriesPoint(chartView, hoveredTimestamp) {
+  if (hoveredTimestamp == null || !chartView.visibleSeries.length) {
+    return null;
+  }
+
+  return chartView.visibleSeries.find((point) => point.timestamp === hoveredTimestamp) || null;
+}
+
+function renderSeriesChart(canvas, chartView, color, emptyMessage, options = {}) {
   const prepared = prepareCanvas(canvas);
   const ctx = prepared.ctx;
   const width = prepared.width;
   const height = prepared.height;
-  const plot = { left: 62, top: 20, right: width - 24, bottom: height - 36 };
+  const plot = getSeriesChartPlot(width, height);
 
   ctx.clearRect(0, 0, width, height);
 
-  if (!series.length) {
+  if (!chartView.series.length) {
     ctx.fillStyle = COLORS.axis;
     ctx.font = "13px Menlo, Consolas, monospace";
     ctx.fillText(emptyMessage, 18, height / 2);
     return;
   }
 
-  const xMin = series[0].timestamp;
-  const xMax = series[series.length - 1].timestamp;
-  const values = series.map((point) => point.value);
-  let yMin = Math.min(...values);
-  let yMax = Math.max(...values);
-  if (yMin === yMax) {
-    yMin -= 1;
-    yMax += 1;
+  drawGridAndAxes(ctx, plot, chartView.xMin, chartView.xMax, chartView.yMin, chartView.yMax);
+
+  if (!chartView.visibleSeries.length) {
+    ctx.save();
+    ctx.fillStyle = COLORS.axis;
+    ctx.font = "13px Menlo, Consolas, monospace";
+    ctx.fillText("No points in the visible time window.", 18, height / 2);
+    ctx.restore();
+    return;
   }
 
-  const yPadding = Math.max((yMax - yMin) * 0.1, 1);
-  yMin -= yPadding;
-  yMax += yPadding;
-
-  drawGridAndAxes(ctx, plot, xMin, xMax, yMin, yMax);
+  ctx.save();
+  clipToPlot(ctx, plot);
 
   ctx.save();
   ctx.strokeStyle = color;
   ctx.lineWidth = 2;
   ctx.beginPath();
-  series.forEach((point, index) => {
-    const x = scale(point.timestamp, xMin, xMax, plot.left, plot.right);
-    const y = scale(point.value, yMin, yMax, plot.bottom, plot.top);
+  chartView.visibleSeries.forEach((point, index) => {
+    const x = scale(point.timestamp, chartView.xMin, chartView.xMax, plot.left, plot.right);
+    const y = scale(point.value, chartView.yMin, chartView.yMax, plot.bottom, plot.top);
     if (index === 0) {
       ctx.moveTo(x, y);
     } else {
@@ -1425,6 +3026,29 @@ function renderSeriesChart(canvas, series, color, emptyMessage) {
     }
   });
   ctx.stroke();
+  ctx.restore();
+
+  if (options.hoveredPoint) {
+    const x = scale(options.hoveredPoint.timestamp, chartView.xMin, chartView.xMax, plot.left, plot.right);
+    const y = scale(options.hoveredPoint.value, chartView.yMin, chartView.yMax, plot.bottom, plot.top);
+    ctx.save();
+    ctx.strokeStyle = "rgba(25, 29, 36, 0.48)";
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    ctx.moveTo(x, plot.top);
+    ctx.lineTo(x, plot.bottom);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = color;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
   ctx.restore();
 }
 
@@ -2067,7 +3691,7 @@ function getStrategyProductData() {
 }
 
 function getHoveredRow(view) {
-  if (!state.hoveredTimestamp) {
+  if (state.hoveredTimestamp == null) {
     return null;
   }
 
@@ -2159,6 +3783,42 @@ function scale(value, domainMin, domainMax, rangeMin, rangeMax) {
   return rangeMin + ratio * (rangeMax - rangeMin);
 }
 
+function mean(values) {
+  const finiteValues = values.filter((value) => Number.isFinite(value));
+  if (!finiteValues.length) {
+    return NaN;
+  }
+  return finiteValues.reduce((sum, value) => sum + value, 0) / finiteValues.length;
+}
+
+function standardDeviation(values) {
+  const finiteValues = values.filter((value) => Number.isFinite(value));
+  if (finiteValues.length < 2) {
+    return 0;
+  }
+  const average = mean(finiteValues);
+  const variance =
+    finiteValues.reduce((sum, value) => sum + (value - average) ** 2, 0) / finiteValues.length;
+  return Math.sqrt(variance);
+}
+
+function readIntegerInput(input, fallback, min, max) {
+  const parsed = Number.parseInt(input?.value ?? "", 10);
+  const safeValue = Number.isFinite(parsed) ? parsed : fallback;
+  return clampNumber(safeValue, min, max);
+}
+
+function createSeededRandom(seed) {
+  let stateValue = (Math.trunc(seed) >>> 0) || 1;
+  return () => {
+    stateValue += 0x6d2b79f5;
+    let t = stateValue;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 function toNumber(value) {
   if (value == null || value === "") {
     return null;
@@ -2221,6 +3881,62 @@ function normalizeBooleanSide(value) {
 
 function clampNumber(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function clipToPlot(ctx, plot) {
+  ctx.beginPath();
+  ctx.rect(plot.left, plot.top, plot.right - plot.left, plot.bottom - plot.top);
+  ctx.clip();
+}
+
+function computeRobustPlotRange(values) {
+  const finiteValues = values.filter((value) => Number.isFinite(value)).sort((left, right) => left - right);
+  if (!finiteValues.length) {
+    return { min: -1, max: 1 };
+  }
+
+  const fullMin = finiteValues[0];
+  const fullMax = finiteValues[finiteValues.length - 1];
+  if (finiteValues.length < 60) {
+    return { min: fullMin, max: fullMax };
+  }
+
+  const trimmedMin = quantileSorted(finiteValues, 0.01);
+  const trimmedMax = quantileSorted(finiteValues, 0.99);
+  const fullSpan = Math.max(fullMax - fullMin, 1e-9);
+  const trimmedSpan = Math.max(trimmedMax - trimmedMin, 1e-9);
+
+  if (fullSpan > trimmedSpan * 2.5) {
+    return { min: trimmedMin, max: trimmedMax };
+  }
+
+  return { min: fullMin, max: fullMax };
+}
+
+function quantileSorted(sortedValues, ratio) {
+  if (!sortedValues.length) {
+    return NaN;
+  }
+
+  const clampedRatio = clampNumber(ratio, 0, 1);
+  const rawIndex = (sortedValues.length - 1) * clampedRatio;
+  const lowerIndex = Math.floor(rawIndex);
+  const upperIndex = Math.ceil(rawIndex);
+  const lowerValue = sortedValues[lowerIndex];
+  const upperValue = sortedValues[upperIndex];
+
+  if (lowerIndex === upperIndex) {
+    return lowerValue;
+  }
+
+  const weight = rawIndex - lowerIndex;
+  return lowerValue + (upperValue - lowerValue) * weight;
+}
+
+function clampVerticalOffset(offset, span) {
+  const safeSpan = Math.max(Math.abs(span), 1);
+  const limit = safeSpan * 2;
+  return clampNumber(offset, -limit, limit);
 }
 
 function setStatus(message) {
