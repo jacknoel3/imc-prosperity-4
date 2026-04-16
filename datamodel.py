@@ -13,7 +13,7 @@ ObservationValue = int
 
 
 class Listing:
-    def __init__(self, symbol: Symbol, product: Product, denomination: Product):
+    def __init__(self, symbol: Symbol, product: Product, denomination: int):
         self.symbol = symbol
         self.product = product
         self.denomination = denomination
