@@ -207,3 +207,5 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+dashboard_round1/examples/*.csv
+data/round1_bt/
