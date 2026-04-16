@@ -4,7 +4,7 @@ from typing import Dict, List
 
 import jsonpickle
 
-Time = str
+Time = int
 Symbol = str
 Product = str
 Position = int
@@ -13,7 +13,7 @@ ObservationValue = int
 
 
 class Listing:
-    def __init__(self, symbol: Symbol, product: Product, denomination: int):
+    def __init__(self, symbol: Symbol, product: Product, denomination: Product):
         self.symbol = symbol
         self.product = product
         self.denomination = denomination
