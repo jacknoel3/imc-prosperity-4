@@ -33,6 +33,10 @@ const BUILTIN_INDICATORS = [
 const COLORS = {
   bid: "rgba(32, 92, 201, 0.58)",
   ask: "rgba(194, 59, 59, 0.58)",
+  noAsksBand: "rgba(32, 92, 201, 0.14)",
+  noBidsBand: "rgba(194, 59, 59, 0.14)",
+  noAsksStroke: "rgba(32, 92, 201, 0.32)",
+  noBidsStroke: "rgba(194, 59, 59, 0.32)",
   tradeBuy: "rgba(215, 116, 24, 0.85)",
   tradeSell: "rgba(16, 129, 118, 0.85)",
   tradeOwn: "rgba(25, 29, 36, 0.92)",
@@ -103,6 +107,7 @@ const state = {
   downsample: 1,
   showBids: true,
   showAsks: true,
+  showOneSidedHighlights: true,
   showMarketTrades: true,
   showOwnTrades: true,
   showStrategyTrades: true,
@@ -157,6 +162,7 @@ function bindElements() {
   els.resetRangeButton = document.getElementById("reset-range-button");
   els.showBidsToggle = document.getElementById("show-bids-toggle");
   els.showAsksToggle = document.getElementById("show-asks-toggle");
+  els.showOneSidedToggle = document.getElementById("show-one-sided-toggle");
   els.showMarketTradesToggle = document.getElementById("show-market-trades-toggle");
   els.showOwnTradesToggle = document.getElementById("show-own-trades-toggle");
   els.showStrategyTradesToggle = document.getElementById("show-strategy-trades-toggle");
@@ -278,6 +284,11 @@ function bindEvents() {
 
   els.showAsksToggle.addEventListener("change", (event) => {
     state.showAsks = event.target.checked;
+    renderAll();
+  });
+
+  els.showOneSidedToggle.addEventListener("change", (event) => {
+    state.showOneSidedHighlights = event.target.checked;
     renderAll();
   });
 
@@ -1678,6 +1689,9 @@ function buildView(dataset, productData) {
     (row) => row.timestamp >= rangeMin && row.timestamp <= rangeMax,
   );
   const filteredRows = rawRows.filter((_, index) => index % state.downsample === 0);
+  const exclusiveBookHighlightBands = buildExclusiveBookHighlightBands(rawRows);
+  const noBidsRowCount = exclusiveBookHighlightBands.filter((band) => band.state === "noBids").length;
+  const noAsksRowCount = exclusiveBookHighlightBands.filter((band) => band.state === "noAsks").length;
   const tradeMin = Math.max(0, toNumber(els.tradeMinInput.value) ?? 0);
   const tradeMax = Math.max(tradeMin, toNumber(els.tradeMaxInput.value) ?? 999999);
 
@@ -1776,6 +1790,10 @@ function buildView(dataset, productData) {
     rangeMin,
     rangeMax,
     filteredRows,
+    exclusiveBookHighlightBands,
+    oneSidedRowCount: exclusiveBookHighlightBands.length,
+    noBidsRowCount,
+    noAsksRowCount,
     visibleTrades,
     visibleStrategyTrades,
     selectedLevels,
@@ -1802,6 +1820,10 @@ function renderMainChart(view = buildView(getActiveDataset(), getActiveProductDa
 
   ctx.save();
   clipToPlot(ctx, plot);
+
+  if (state.showOneSidedHighlights) {
+    drawExclusiveBookHighlightBands(ctx, view.exclusiveBookHighlightBands, plot, xScale);
+  }
 
   if (state.showBids) {
     drawBookPoints(ctx, view.filteredRows, plot, xScale, yScale, "bids", view.selectedLevels, COLORS.bid);
@@ -1907,6 +1929,7 @@ function updateStatsCard(view) {
     `product: ${state.selectedProduct}`,
     `range: ${formatInteger(view.rangeMin)} -> ${formatInteger(view.rangeMax)}`,
     `rows in view: ${formatInteger(view.filteredRows.length)}`,
+    `one-sided rows in range: ${formatInteger(view.oneSidedRowCount)} (bid-only ${formatInteger(view.noAsksRowCount)}, ask-only ${formatInteger(view.noBidsRowCount)})`,
     `trades shown: ${formatInteger(view.visibleTrades.length)}`,
     `backtest trades shown: ${formatInteger(view.visibleStrategyTrades.length)}`,
     `avg spread: ${formatMaybe(avgSpread)}`,
@@ -1941,6 +1964,7 @@ function updateSnapshotAndLogCards(view, row) {
     `mid: ${formatMaybe(row.midPrice)}`,
     `wall mid: ${formatMaybe(row.wallMid)}`,
     `spread: ${formatMaybe(row.spread)}`,
+    `book state: ${describeBookAvailabilityState(getBookAvailabilityState(row))}`,
     "",
     "bids:",
     ...formatBookSide(row.bids),
@@ -2027,6 +2051,7 @@ function showTooltip(event, view, row) {
     `t=${formatInteger(row.timestamp)}`,
     `mid=${formatMaybe(row.midPrice)} wall=${formatMaybe(row.wallMid)}`,
     `spread=${formatMaybe(row.spread)}`,
+    `book=${describeBookAvailabilityState(getBookAvailabilityState(row))}`,
   ];
 
   if (trades.length) {
@@ -2680,6 +2705,25 @@ function drawBookPoints(ctx, rows, plot, xScale, yScale, sideKey, selectedLevels
   ctx.restore();
 }
 
+function drawExclusiveBookHighlightBands(ctx, bands, plot, xScale) {
+  if (!bands.length) {
+    return;
+  }
+
+  ctx.save();
+  bands.forEach((band) => {
+    const left = xScale(band.startTimestamp);
+    const right = xScale(band.endTimestamp);
+    const width = Math.max(1, right - left);
+    ctx.fillStyle = band.state === "noAsks" ? COLORS.noAsksBand : COLORS.noBidsBand;
+    ctx.fillRect(left, plot.top, width, plot.bottom - plot.top);
+    ctx.strokeStyle = band.state === "noAsks" ? COLORS.noAsksStroke : COLORS.noBidsStroke;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(left, plot.top, width, plot.bottom - plot.top);
+  });
+  ctx.restore();
+}
+
 function drawIndicatorLines(ctx, indicatorSeries, xScale, yScale, productData) {
   ctx.save();
   ctx.lineWidth = 1.6;
@@ -2738,6 +2782,26 @@ function renderLegend(view) {
     buildLegendItem(drawLegendCross(COLORS.tradeOwn), "Own trade", !state.showOwnTrades),
   );
 
+  if (view.noAsksRowCount) {
+    items.push(
+      buildLegendItem(
+        drawLegendBand(COLORS.noAsksBand, COLORS.noAsksStroke),
+        "Bid-only snapshot (no asks)",
+        !state.showOneSidedHighlights,
+      ),
+    );
+  }
+
+  if (view.noBidsRowCount) {
+    items.push(
+      buildLegendItem(
+        drawLegendBand(COLORS.noBidsBand, COLORS.noBidsStroke),
+        "Ask-only snapshot (no bids)",
+        !state.showOneSidedHighlights,
+      ),
+    );
+  }
+
   items.push(
     buildLegendItem(
       drawLegendDiamond(COLORS.strategyBuy),
@@ -2784,13 +2848,19 @@ function renderLegend(view) {
   const levelsLabel = view.selectedLevels.length
     ? view.selectedLevels.map((level) => `L${level}`).join(", ")
     : "none";
+  let oneSidedLabel = "One-sided snapshot highlighting is turned off.";
+  if (state.showOneSidedHighlights) {
+    oneSidedLabel = view.oneSidedRowCount
+      ? "Blue bands mark bid-only snapshots with no asks, and red bands mark ask-only snapshots with no bids."
+      : "No one-sided snapshots are visible in the current window.";
+  }
 
   let overlayLabel = "No backtest overlay loaded.";
   if (state.strategyOverlay) {
     overlayLabel = `Backtest overlay loaded: ${state.strategyOverlay.label}. Strategy fills are drawn last so they sit on top of the market plot.`;
   }
 
-  els.legendNote.textContent = `${normalizationLabel} Visible book levels: ${levelsLabel}. Quote dot size scales with quoted volume. Market trade direction is inferred from price vs. the current book unless the trade matches one of your trader IDs. Drag to pan, hold Shift while dragging to zoom into a window, use the mouse wheel to zoom, zoom actions recenter vertically, isolated price spikes are de-emphasized in auto-fit until you zoom close to them, and double-click to reset. ${overlayLabel}`;
+  els.legendNote.textContent = `${normalizationLabel} Visible book levels: ${levelsLabel}. ${oneSidedLabel} Quote dot size scales with quoted volume. Market trade direction is inferred from price vs. the current book unless the trade matches one of your trader IDs. Drag to pan, hold Shift while dragging to zoom into a window, use the mouse wheel to zoom, zoom actions recenter vertically, isolated price spikes are de-emphasized in auto-fit until you zoom close to them, and double-click to reset. ${overlayLabel}`;
 }
 
 function drawTrades(ctx, trades, xScale, yScale, productData) {
@@ -2907,6 +2977,10 @@ function drawLegendTriangle(color, upwards) {
 
 function drawLegendCross(color) {
   return `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><line x1="3" y1="3" x2="13" y2="13" stroke="${color}" stroke-width="2"></line><line x1="3" y1="13" x2="13" y2="3" stroke="${color}" stroke-width="2"></line></svg>`;
+}
+
+function drawLegendBand(fillColor, strokeColor) {
+  return `<svg width="20" height="16" viewBox="0 0 20 16" aria-hidden="true"><rect x="4" y="1.5" width="12" height="13" rx="2" fill="${fillColor}" stroke="${strokeColor}" stroke-width="1.2"></rect></svg>`;
 }
 
 function drawLegendSquare(color) {
@@ -3696,6 +3770,63 @@ function getHoveredRow(view) {
   }
 
   return view.filteredRows.find((row) => row.timestamp === state.hoveredTimestamp) || null;
+}
+
+function getBookAvailabilityState(row) {
+  const hasBids = Boolean(row?.bids?.length);
+  const hasAsks = Boolean(row?.asks?.length);
+  if (hasBids && hasAsks) {
+    return "twoSided";
+  }
+  if (hasBids) {
+    return "noAsks";
+  }
+  if (hasAsks) {
+    return "noBids";
+  }
+  return "empty";
+}
+
+function describeBookAvailabilityState(state) {
+  switch (state) {
+    case "noAsks":
+      return "bid-only (no asks)";
+    case "noBids":
+      return "ask-only (no bids)";
+    case "empty":
+      return "empty (no bids or asks)";
+    default:
+      return "two-sided";
+  }
+}
+
+function buildExclusiveBookHighlightBands(rows) {
+  if (!rows.length) {
+    return [];
+  }
+
+  const baseStep = getBaseTimeStep(rows);
+  const bands = [];
+  rows.forEach((row, index) => {
+    const stateLabel = getBookAvailabilityState(row);
+    if (stateLabel !== "noAsks" && stateLabel !== "noBids") {
+      return;
+    }
+
+    const previousTimestamp = rows[index - 1]?.timestamp;
+    const nextTimestamp = rows[index + 1]?.timestamp;
+    bands.push({
+      state: stateLabel,
+      startTimestamp: Number.isFinite(previousTimestamp)
+        ? (previousTimestamp + row.timestamp) / 2
+        : row.timestamp - baseStep / 2,
+      endTimestamp: Number.isFinite(nextTimestamp)
+        ? (row.timestamp + nextTimestamp) / 2
+        : row.timestamp + baseStep / 2,
+    });
+  });
+
+  return bands;
 }
 
 function findNearestRow(rows, timestamp) {
