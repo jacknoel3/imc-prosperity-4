@@ -6,6 +6,7 @@ PRODUCT        = "INTARIAN_PEPPER_ROOT"
 POS_LIMIT      = 80
 EDGE           = 100
 HALF_SPREAD    = 6.5   # historischer Durchschnitt: mean spread 13.0 / 2
+TARGET_LONG    = 80
 
 class Trader:
 
@@ -82,6 +83,15 @@ class Trader:
                 px = int(fv - EDGE)
                 orders.append(Order(PRODUCT, px, buy_cap))
                 print(f"  BUY  {buy_cap}x @ {px}  (no bids: catch sellers)")
+
+        # --- Re-enter to long 80 by only crossing the first ask layer ---
+        if has_asks and position < TARGET_LONG:
+            best_ask = min(od.sell_orders.keys())
+            ask_volume = abs(od.sell_orders[best_ask])
+            refill = min(TARGET_LONG - position, ask_volume)
+            if refill > 0:
+                orders.append(Order(PRODUCT, best_ask, refill))
+                print(f"  REFILL {refill}x @ {best_ask}  (restore long {TARGET_LONG})")
 
         result[PRODUCT] = orders
         return result, 0, json.dumps(mem)

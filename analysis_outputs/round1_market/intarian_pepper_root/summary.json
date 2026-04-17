@@ -1,0 +1,143 @@
+{
+  "fair": {
+    "stationary": false,
+    "drifting": true,
+    "mean_reverting": false,
+    "jumpy": true,
+    "regime_switching": true,
+    "acf_lag1": -0.5000487448537202,
+    "level_acf_lag1": 0.7560392210262246,
+    "mean_reversion_corr": -0.34925714659055723,
+    "jump_rate_95": 0.05427209387605427,
+    "regime_span": 2845.4152598734836,
+    "rolling_mean_range": 1097.5320912942607,
+    "daily_drift_mean": 999.4622331691293,
+    "rolling_vol_mean": 207.75417712419986
+  },
+  "quote": {
+    "one_sided_rate": 0.07706666666666667,
+    "spread_mean": 13.046698930944814,
+    "spread_mode": 13,
+    "inner_wall_rate": 0.09953333333333333,
+    "level_presence": {
+      "bid_1": 0.9594666666666667,
+      "bid_2": 0.6471,
+      "bid_3": 0.014833333333333334,
+      "ask_1": 0.9616666666666667,
+      "ask_2": 0.6510333333333334,
+      "ask_3": 0.015566666666666666
+    },
+    "level_size_median": {
+      "bid_1": 10.0,
+      "bid_2": 20.0,
+      "bid_3": 20.0,
+      "ask_1": 10.0,
+      "ask_2": 20.0,
+      "ask_3": 20.0
+    },
+    "imbalance_distribution": {
+      "heavy_ask": 0.04728511320376678,
+      "ask": 0.11650971749148467,
+      "flat": 0.6775195351632939,
+      "bid": 0.11660989781606892,
+      "heavy_bid": 0.04207573632538569
+    },
+    "quote_offsets_median": {
+      "bid_offset_fair_1": -6.0,
+      "bid_offset_fair_2": -9.0,
+      "bid_offset_fair_3": -12.5,
+      "ask_offset_fair_1": 6.0,
+      "ask_offset_fair_2": 9.0,
+      "ask_offset_fair_3": 12.94117647058738
+    },
+    "spread_histogram": {
+      "2": 0.010184917653857267,
+      "3": 0.01347154001733603,
+      "4": 0.004984108639121641,
+      "5": 0.0017697197341808727,
+      "6": 0.002058653568332852,
+      "7": 0.0023837041317538283,
+      "8": 0.0050924588269286334,
+      "9": 0.004622941346431667,
+      "10": 0.0024198208610228256,
+      "11": 0.11084224212655303,
+      "12": 0.22168448425310605,
+      "13": 0.22952181450447848,
+      "14": 0.17162669748627565,
+      "15": 0.06844120196475008,
+      "16": 0.07432822883559664,
+      "17": 0.05684773186940191,
+      "18": 0.00790956370991043,
+      "19": 0.0061759607049985555,
+      "20": 0.004803524992776654,
+      "21": 0.0008306847731869402
+    }
+  },
+  "arrival": {
+    "trades_per_active_step_mean": 1.0401234567901234,
+    "active_timestamp_rate": 0.0324,
+    "mean_gap": 1028.012358393409,
+    "gap_cv": 0.8710612800315088,
+    "poisson_like": true,
+    "time_of_day_trade_mean": 0.5084537138184639,
+    "spread_state_dependence": {
+      "<=10": 314,
+      "11-14": 514,
+      "15-18": 134,
+      "19+": 7
+    }
+  },
+  "trade_sizes": {
+    "size_mean": 5.1730959446092974,
+    "size_median": 5.0,
+    "buy_size_median": 5.0,
+    "sell_size_median": 5.0,
+    "discrete_size_top": {
+      "6": 219,
+      "3": 198,
+      "7": 195,
+      "5": 195,
+      "4": 161,
+      "8": 42,
+      "2": 1
+    }
+  },
+  "trade_price": {
+    "price_minus_fair_mean": -0.40152531176453665,
+    "price_minus_mid_mean": -0.37734915924826906,
+    "print_location": {
+      "touch": 0.9930761622156281,
+      "through_or_outside": 0.005934718100890208,
+      "inside": 0.0009891196834817012
+    },
+    "sweep_rate_visible": 0.0,
+    "touch_rate": 0.9930761622156281
+  },
+  "fills": {
+    "available": true,
+    "passive_fill_rate": null,
+    "passive_fill_share_mean": null,
+    "best_quote_fill_rate": null,
+    "off_best_fill_rate": null,
+    "fill_delay_mean": null,
+    "queue_haircut_proxy": null,
+    "taker_slippage_mean": 1.5,
+    "taker_visible_depth_mean": 20.333333333333332,
+    "markout_1_mean": null,
+    "markout_5_mean": null
+  },
+  "reduced_form": {
+    "fair_process": "drifting with regimes",
+    "latent_archetypes": [
+      "tight top-of-book market maker",
+      "directional repricer / trend follower"
+    ],
+    "quote_process": "quotes concentrate around stable offsets from fair and rounded grid prices",
+    "trade_arrival_process": "roughly Poisson-like sparse arrivals",
+    "trade_size_process": "discrete sizes concentrated on a few values",
+    "trade_price_process": "prints mostly at touch with occasional inside/outside executions",
+    "maker_fill_process": "fill chance depends on quote distance, spread, and queue ahead approximation",
+    "taker_fill_process": "immediate fills limited by visible depth with sweep depth approximated from top three levels",
+    "simplest_explanation": "INTARIAN_PEPPER_ROOT looks like a market driven by tight top-of-book market maker, directional repricer / trend follower."
+  }
+}

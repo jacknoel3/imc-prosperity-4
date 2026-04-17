@@ -1,0 +1,71 @@
+{
+  "product": "ASH_COATED_OSMIUM",
+  "position_limit": 80,
+  "fair_process_type": "drift_regime",
+  "fair_drift_mean": -8.26708949964753,
+  "fair_step_vol": 168.14896126029325,
+  "spread_distribution": {
+    "5": 0.005570829113008248,
+    "6": 0.011865142526407177,
+    "7": 0.0059325712632035885,
+    "8": 0.002242801331211113,
+    "9": 0.01356533063232528,
+    "10": 0.023115323397482273,
+    "11": 0.011684271451309507,
+    "12": 0.003942989437129214,
+    "13": 0.0056431775430473155,
+    "15": 0.002315149761250181,
+    "16": 0.6366300101287802,
+    "17": 0.0012299233106641586,
+    "18": 0.12487339024743163,
+    "19": 0.12711619157864273,
+    "20": 0.0001446968600781363,
+    "21": 0.024092027203009694,
+    "22": 3.6174215019534075e-05
+  },
+  "quote_offsets_by_level": {
+    "bid_offset_fair_1": -8.0,
+    "bid_offset_fair_2": -10.0,
+    "bid_offset_fair_3": -10.631578947368325,
+    "ask_offset_fair_1": 8.0,
+    "ask_offset_fair_2": 10.0,
+    "ask_offset_fair_3": 11.5
+  },
+  "level_presence": {
+    "bid_1": 0.9598666666666666,
+    "bid_2": 0.6532,
+    "bid_3": 0.025966666666666666,
+    "ask_1": 0.9599666666666666,
+    "ask_2": 0.6517333333333334,
+    "ask_3": 0.0249
+  },
+  "trade_arrival_model": {
+    "active_timestamp_rate": 0.04,
+    "trades_per_active_step_mean": 1.0541666666666667,
+    "gap_cv": 0.9224944987868342
+  },
+  "trade_size_distribution": {
+    "6": 230,
+    "5": 224,
+    "3": 179,
+    "4": 172,
+    "2": 160,
+    "7": 78,
+    "9": 76,
+    "10": 75
+  },
+  "trade_price_process": {
+    "touch_rate": 1.0,
+    "sweep_rate_visible": 0.0,
+    "price_minus_fair_mean": 0.15440278717923725
+  },
+  "maker_fill_approximation": {
+    "passive_fill_rate": null,
+    "best_quote_fill_rate": null,
+    "queue_haircut_proxy": null
+  },
+  "taker_fill_logic": {
+    "visible_depth_mean": null,
+    "slippage_mean": null
+  }
+}

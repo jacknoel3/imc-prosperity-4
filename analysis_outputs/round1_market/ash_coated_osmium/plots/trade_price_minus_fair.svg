@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700">
+<rect x="0" y="0" width="1200" height="700" fill="#f8fafc"/>
+<style>
+text { font-family: Avenir Next, Helvetica, Arial, sans-serif; fill: #0f172a; }
+.title { font-size: 22px; font-weight: 700; }
+.subtitle { font-size: 12px; fill: #475569; }
+.axis { font-size: 12px; }
+.legend { font-size: 12px; }
+.grid { stroke: #dbe4ee; stroke-width: 1; }
+.frame { stroke: #94a3b8; fill: #ffffff; stroke-width: 1; rx: 10; }
+</style>
+<text class="title" x="96" y="38">ASH_COATED_OSMIUM Trade Price Minus Fair</text>
+<text class="subtitle" x="96" y="58">Distribution view</text>
+<line class="grid" x1="96.0" y1="78" x2="96.0" y2="626"/>
+<line class="grid" x1="96" y1="78.0" x2="1172" y2="78.0"/>
+<line class="grid" x1="311.2" y1="78" x2="311.2" y2="626"/>
+<line class="grid" x1="96" y1="187.6" x2="1172" y2="187.6"/>
+<line class="grid" x1="526.4" y1="78" x2="526.4" y2="626"/>
+<line class="grid" x1="96" y1="297.2" x2="1172" y2="297.2"/>
+<line class="grid" x1="741.6" y1="78" x2="741.6" y2="626"/>
+<line class="grid" x1="96" y1="406.8" x2="1172" y2="406.8"/>
+<line class="grid" x1="956.8" y1="78" x2="956.8" y2="626"/>
+<line class="grid" x1="96" y1="516.4" x2="1172" y2="516.4"/>
+<line class="grid" x1="1172.0" y1="78" x2="1172.0" y2="626"/>
+<line class="grid" x1="96" y1="626.0" x2="1172" y2="626.0"/>
+<rect class="frame" x="96" y="78" width="1076" height="548"/>
+<rect x="96.00" y="614.00" width="33.87" height="12.00" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="131.87" y="591.19" width="33.87" height="34.81" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="167.73" y="601.99" width="33.87" height="24.01" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="203.60" y="583.99" width="33.87" height="42.01" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="239.47" y="626.00" width="33.87" height="0.00" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="275.33" y="623.60" width="33.87" height="2.40" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="311.20" y="155.48" width="33.87" height="470.52" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="347.07" y="597.19" width="33.87" height="28.81" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="382.93" y="586.39" width="33.87" height="39.61" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="418.80" y="601.99" width="33.87" height="24.01" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="454.67" y="622.40" width="33.87" height="3.60" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="490.53" y="618.80" width="33.87" height="7.20" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="526.40" y="609.20" width="33.87" height="16.80" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="562.27" y="614.00" width="33.87" height="12.00" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="598.13" y="622.40" width="33.87" height="3.60" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="634.00" y="576.79" width="33.87" height="49.21" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="669.87" y="609.20" width="33.87" height="16.80" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="705.73" y="606.80" width="33.87" height="19.20" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="741.60" y="618.80" width="33.87" height="7.20" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="777.47" y="623.60" width="33.87" height="2.40" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="813.33" y="605.59" width="33.87" height="20.41" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="849.20" y="574.39" width="33.87" height="51.61" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="885.07" y="600.79" width="33.87" height="25.21" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="920.93" y="149.48" width="33.87" height="476.52" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="956.80" y="622.40" width="33.87" height="3.60" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="992.67" y="623.60" width="33.87" height="2.40" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="1028.53" y="609.20" width="33.87" height="16.80" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="1064.40" y="589.99" width="33.87" height="36.01" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="1100.27" y="585.19" width="33.87" height="40.81" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<rect x="1136.13" y="597.19" width="33.87" height="28.81" rx="2" fill="#0f766e" fill-opacity="0.55"/>
+<text class="axis" x="96.0" y="670" text-anchor="middle">-14</text>
+<text class="axis" x="84" y="82.0" text-anchor="end">0.361</text>
+<text class="axis" x="311.2" y="670" text-anchor="middle">-8.52</text>
+<text class="axis" x="84" y="191.6" text-anchor="end">0.289</text>
+<text class="axis" x="526.4" y="670" text-anchor="middle">-2.92</text>
+<text class="axis" x="84" y="301.2" text-anchor="end">0.217</text>
+<text class="axis" x="741.6" y="670" text-anchor="middle">2.69</text>
+<text class="axis" x="84" y="410.8" text-anchor="end">0.144</text>
+<text class="axis" x="956.8" y="670" text-anchor="middle">8.30</text>
+<text class="axis" x="84" y="520.4" text-anchor="end">0.072</text>
+<text class="axis" x="1172.0" y="670" text-anchor="middle">14</text>
+<text class="axis" x="84" y="630.0" text-anchor="end">0.000</text>
+<text class="axis" x="634.0" y="692" text-anchor="middle">Price - fair</text>
+<text class="axis" transform="translate(22 352.0) rotate(-90)" text-anchor="middle">Density</text>
+<rect x="106" y="62" width="16" height="10" fill="#0f766e" fill-opacity="0.55"/>
+<text class="legend" x="130" y="71">actual</text>
+</svg>

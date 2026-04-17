@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700">
+<rect x="0" y="0" width="1200" height="700" fill="#f8fafc"/>
+<style>
+text { font-family: Avenir Next, Helvetica, Arial, sans-serif; fill: #0f172a; }
+.title { font-size: 22px; font-weight: 700; }
+.subtitle { font-size: 12px; fill: #475569; }
+.axis { font-size: 12px; }
+.legend { font-size: 12px; }
+.grid { stroke: #dbe4ee; stroke-width: 1; }
+.frame { stroke: #94a3b8; fill: #ffffff; stroke-width: 1; rx: 10; }
+</style>
+<text class="title" x="96" y="38">INTARIAN_PEPPER_ROOT Top-of-Book Spread Histogram</text>
+<text class="subtitle" x="96" y="58">Category comparison</text>
+<line class="grid" x1="96" y1="78.0" x2="1172" y2="78.0"/>
+<line class="grid" x1="96" y1="178.4" x2="1172" y2="178.4"/>
+<line class="grid" x1="96" y1="278.8" x2="1172" y2="278.8"/>
+<line class="grid" x1="96" y1="379.2" x2="1172" y2="379.2"/>
+<line class="grid" x1="96" y1="479.6" x2="1172" y2="479.6"/>
+<line class="grid" x1="96" y1="580.0" x2="1172" y2="580.0"/>
+<rect class="frame" x="96" y="78" width="1076" height="502"/>
+<rect x="100.00" y="560.63" width="43.80" height="19.37" rx="3" fill="#0f766e" fill-opacity="0.82"/>
+<rect x="153.80" y="554.38" width="43.80" height="25.62" rx="3" fill="#0f766e" fill-opacity="0.82"/>
+<rect x="207.60" y="570.52" width="43.80" height="9.48" rx="3" fill="#0f766e" fill-opacity="0.82"/>
+<rect x="261.40" y="576.63" width="43.80" height="3.37" rx="3" fill="#0f766e" fill-opacity="0.82"/>
+<rect x="315.20" y="576.08" width="43.80" height="3.92" rx="3" fill="#0f766e" fill-opacity="0.82"/>
+<rect x="369.00" y="575.47" width="43.80" height="4.53" rx="3" fill="#0f766e" fill-opacity="0.82"/>
+<rect x="422.80" y="570.31" width="43.80" height="9.69" rx="3" fill="#0f766e" fill-opacity="0.82"/>
+<rect x="476.60" y="571.21" width="43.80" height="8.79" rx="3" fill="#0f766e" fill-opacity="0.82"/>
+<rect x="530.40" y="575.40" width="43.80" height="4.60" rx="3" fill="#0f766e" fill-opacity="0.82"/>
+<rect x="584.20" y="369.19" width="43.80" height="210.81" rx="3" fill="#0f766e" fill-opacity="0.82"/>
+<rect x="638.00" y="158.38" width="43.80" height="421.62" rx="3" fill="#0f766e" fill-opacity="0.82"/>
+<rect x="691.80" y="143.48" width="43.80" height="436.52" rx="3" fill="#0f766e" fill-opacity="0.82"/>
+<rect x="745.60" y="253.59" width="43.80" height="326.41" rx="3" fill="#0f766e" fill-opacity="0.82"/>
+<rect x="799.40" y="449.83" width="43.80" height="130.17" rx="3" fill="#0f766e" fill-opacity="0.82"/>
+<rect x="853.20" y="438.64" width="43.80" height="141.36" rx="3" fill="#0f766e" fill-opacity="0.82"/>
+<rect x="907.00" y="471.88" width="43.80" height="108.12" rx="3" fill="#0f766e" fill-opacity="0.82"/>
+<rect x="960.80" y="564.96" width="43.80" height="15.04" rx="3" fill="#0f766e" fill-opacity="0.82"/>
+<rect x="1014.60" y="568.25" width="43.80" height="11.75" rx="3" fill="#0f766e" fill-opacity="0.82"/>
+<rect x="1068.40" y="570.86" width="43.80" height="9.14" rx="3" fill="#0f766e" fill-opacity="0.82"/>
+<rect x="1122.20" y="578.42" width="43.80" height="1.58" rx="3" fill="#0f766e" fill-opacity="0.82"/>
+<text class="axis" x="84" y="82.0" text-anchor="end">0.264</text>
+<text class="axis" x="84" y="182.4" text-anchor="end">0.211</text>
+<text class="axis" x="84" y="282.8" text-anchor="end">0.158</text>
+<text class="axis" x="84" y="383.2" text-anchor="end">0.106</text>
+<text class="axis" x="84" y="483.6" text-anchor="end">0.053</text>
+<text class="axis" x="84" y="584.0" text-anchor="end">0.000</text>
+<text class="axis" x="634.0" y="692" text-anchor="middle">Spread</text>
+<text class="axis" transform="translate(22 329.0) rotate(-90)" text-anchor="middle">Frequency</text>
+</svg>

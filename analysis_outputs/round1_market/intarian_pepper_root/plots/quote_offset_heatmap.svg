@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="700" viewBox="0 0 1100 700">
+<rect x="0" y="0" width="1100" height="700" fill="#f8fafc"/>
+<style>
+text { font-family: Avenir Next, Helvetica, Arial, sans-serif; fill: #0f172a; }
+.title { font-size: 22px; font-weight: 700; }
+.subtitle { font-size: 12px; fill: #475569; }
+.axis { font-size: 12px; }
+.legend { font-size: 12px; }
+.grid { stroke: #dbe4ee; stroke-width: 1; }
+.frame { stroke: #94a3b8; fill: #ffffff; stroke-width: 1; rx: 10; }
+</style>
+<text class="title" x="170" y="38">INTARIAN_PEPPER_ROOT Quote Offset Heatmap</text>
+<text class="subtitle" x="170" y="58">Row-wise quote concentration across offset buckets</text>
+<rect class="frame" x="170" y="78" width="902" height="512"/>
+<rect x="170.00" y="78.00" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="282.75" y="78.00" width="112.75" height="85.33" fill="rgb(233,240,234)"/>
+<rect x="395.50" y="78.00" width="112.75" height="85.33" fill="rgb(116,161,81)"/>
+<text class="axis" x="451.88" y="124.67" text-anchor="middle" fill="#ffffff">0.78</text>
+<rect x="508.25" y="78.00" width="112.75" height="85.33" fill="rgb(224,234,222)"/>
+<rect x="621.00" y="78.00" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="733.75" y="78.00" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="846.50" y="78.00" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="959.25" y="78.00" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="170.00" y="163.33" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="282.75" y="163.33" width="112.75" height="85.33" fill="rgb(217,230,213)"/>
+<text class="axis" x="339.12" y="210.00" text-anchor="middle" fill="#0f172a">0.18</text>
+<rect x="395.50" y="163.33" width="112.75" height="85.33" fill="rgb(117,163,84)"/>
+<text class="axis" x="451.88" y="210.00" text-anchor="middle" fill="#ffffff">0.77</text>
+<rect x="508.25" y="163.33" width="112.75" height="85.33" fill="rgb(238,243,240)"/>
+<rect x="621.00" y="163.33" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="733.75" y="163.33" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="846.50" y="163.33" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="959.25" y="163.33" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="170.00" y="248.67" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="282.75" y="248.67" width="112.75" height="85.33" fill="rgb(100,151,61)"/>
+<text class="axis" x="339.12" y="295.33" text-anchor="middle" fill="#ffffff">0.87</text>
+<rect x="395.50" y="248.67" width="112.75" height="85.33" fill="rgb(225,235,224)"/>
+<rect x="508.25" y="248.67" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="621.00" y="248.67" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="733.75" y="248.67" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="846.50" y="248.67" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="959.25" y="248.67" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="170.00" y="334.00" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="282.75" y="334.00" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="395.50" y="334.00" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="508.25" y="334.00" width="112.75" height="85.33" fill="rgb(240,245,243)"/>
+<rect x="621.00" y="334.00" width="112.75" height="85.33" fill="rgb(229,238,229)"/>
+<rect x="733.75" y="334.00" width="112.75" height="85.33" fill="rgb(115,161,80)"/>
+<text class="axis" x="790.12" y="380.67" text-anchor="middle" fill="#ffffff">0.79</text>
+<rect x="846.50" y="334.00" width="112.75" height="85.33" fill="rgb(235,242,236)"/>
+<rect x="959.25" y="334.00" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="170.00" y="419.33" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="282.75" y="419.33" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="395.50" y="419.33" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="508.25" y="419.33" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="621.00" y="419.33" width="112.75" height="85.33" fill="rgb(238,244,241)"/>
+<rect x="733.75" y="419.33" width="112.75" height="85.33" fill="rgb(97,149,57)"/>
+<text class="axis" x="790.12" y="466.00" text-anchor="middle" fill="#ffffff">0.89</text>
+<rect x="846.50" y="419.33" width="112.75" height="85.33" fill="rgb(237,243,239)"/>
+<rect x="959.25" y="419.33" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="170.00" y="504.67" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="282.75" y="504.67" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="395.50" y="504.67" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="508.25" y="504.67" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="621.00" y="504.67" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<rect x="733.75" y="504.67" width="112.75" height="85.33" fill="rgb(232,240,233)"/>
+<rect x="846.50" y="504.67" width="112.75" height="85.33" fill="rgb(94,147,53)"/>
+<text class="axis" x="902.88" y="551.33" text-anchor="middle" fill="#ffffff">0.91</text>
+<rect x="959.25" y="504.67" width="112.75" height="85.33" fill="rgb(247,250,252)"/>
+<text class="axis" transform="translate(226.38 658) rotate(-28)" text-anchor="end"><=-20</text>
+<text class="axis" transform="translate(339.12 658) rotate(-28)" text-anchor="end">-20:-10</text>
+<text class="axis" transform="translate(451.88 658) rotate(-28)" text-anchor="end">-10:-5</text>
+<text class="axis" transform="translate(564.62 658) rotate(-28)" text-anchor="end">-5:0</text>
+<text class="axis" transform="translate(677.38 658) rotate(-28)" text-anchor="end">0:5</text>
+<text class="axis" transform="translate(790.12 658) rotate(-28)" text-anchor="end">5:10</text>
+<text class="axis" transform="translate(902.88 658) rotate(-28)" text-anchor="end">10:20</text>
+<text class="axis" transform="translate(1015.62 658) rotate(-28)" text-anchor="end">>=20</text>
+<text class="axis" x="160" y="124.67" text-anchor="end">bid_1</text>
+<text class="axis" x="160" y="210.00" text-anchor="end">bid_2</text>
+<text class="axis" x="160" y="295.33" text-anchor="end">bid_3</text>
+<text class="axis" x="160" y="380.67" text-anchor="end">ask_1</text>
+<text class="axis" x="160" y="466.00" text-anchor="end">ask_2</text>
+<text class="axis" x="160" y="551.33" text-anchor="end">ask_3</text>
+<text class="axis" x="621.0" y="692" text-anchor="middle">Offset bucket vs fair</text>
+<text class="axis" transform="translate(22 334.0) rotate(-90)" text-anchor="middle">Book level</text>
+</svg>

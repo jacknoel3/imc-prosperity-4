@@ -1,0 +1,1 @@
+timestamp,buyer,seller,product,currency,price,quantity,side,day,fair_value,mid_price,spread,imbalance_l1,bid_price_1,ask_price_1,bid_volume_1,ask_volume_1,bid_price_2,bid_volume_2,ask_price_2,ask_volume_2,bid_price_3,bid_volume_3,ask_price_3,ask_volume_3,quote_distance_fair,is_taker,visible_depth,slippage_vs_touch,probe_name
