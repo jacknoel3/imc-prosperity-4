@@ -44,6 +44,7 @@ You are the lead strategist for an IMC Prosperity 4 team. You delegate all heavy
 - Zero print() calls
 - Never hardcode historical prices without runtime fallback
 - Current submission file: `trader.py`
-- Round 1 position limits: ASH_COATED_OSMIUM = 80, INTARIAN_PEPPER_ROOT = 80
-- Backtest run from repo root (`imc-prosperity-4/imc-prosperity-4/`), round = 1
+- Round 2 position limits: ASH_COATED_OSMIUM = 80, INTARIAN_PEPPER_ROOT = 80
+- Backtest run from repo root (`imc-prosperity-4/imc-prosperity-4/`), round = 2
 - Backtest venv path if needed: locate via `which prosperity3bt` or `find ~ -name prosperity3bt 2>/dev/null | head -1`
+- `bid()` method must return a reasoned MAF value (not 0) — top 50% of bids get 25% extra market flow

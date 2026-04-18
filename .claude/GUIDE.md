@@ -1,5 +1,35 @@
 # Claude Code — Working Guide
 
+## Repo Layout
+
+```
+imc-prosperity-4/imc-prosperity-4/           ← repo root (all commands run from here)
+│
+├── trader.py                                 ← SUBMISSION FILE — always root-level
+├── datamodel.py                              ← IMC-provided types, never modify
+│
+├── misc/
+│   ├── ALGO_STRUCTURE.md                     ← Round-neutral API/mechanics reference
+│   ├── trader_structure.py                   ← Minimal Trader class template
+│   └── datamodel.py                          ← Local copy of IMC types for testing
+│
+├── phase1/
+│   ├── round1/algo/data/                     ← Round 1 CSVs (days -2, -1, 0) ✅
+│   ├── round1/algo/analysis/                 ← Round 1 EDA scripts + eda_output/
+│   ├── round1/algo/strategy/                 ← Round 1 historical trader variants
+│   │
+│   ├── round2/algo/data/                     ← Round 2 CSVs (days -1, 0, 1) ← CURRENT DATA
+│   ├── round2/algo/analysis/                 ← Round 2 EDA (add scripts here)
+│   └── round2/algo/strategy/                 ← Round 2 trader variants (add here)
+│
+├── backtests/                                ← Historical .log files (timestamped)
+└── .claude/                                  ← Agent configs, rules, skills
+```
+
+> Round 0 (`phase1/round0/`) is archived — EMERALDS + TOMATOES, done.
+
+---
+
 ## Agent Structure
 
 ```
@@ -12,7 +42,7 @@ You
 ```
 
 - Quick question or small edit → talk to Claude directly
-- Data, strategy, or code changes → use agents
+- Data analysis, strategy decisions, or code changes → use agents
 
 ---
 
@@ -20,81 +50,69 @@ You
 
 | Command | What it does |
 |---------|-------------|
-| `/backtest` | Runs backtest (round 1), reports per-product PnL, flags regressions |
+| `/backtest` | Runs `prosperity3bt trader.py 2`, reports per-product PnL, flags regressions |
 | `/review` | Pre-submission checklist on trader.py — returns PASS or FAIL |
 | `/new-round` | Scaffolds round transition: updates CLAUDE.md, creates product rules file |
 
 ---
 
-## 0 → Strategy (the full flow)
+## Current Workflow (Round 2)
 
-### 1. Research first — no code yet
+### 1. Research Round 2 data
 ```
-@researcher analyze ASH_COATED_OSMIUM — fair value, spread, autocorrelation, book depth
+@researcher analyze ASH_COATED_OSMIUM and INTARIAN_PEPPER_ROOT
+from phase1/round2/algo/data/ — check if signals changed vs Round 1
 ```
-Returns a ~15 line findings block. Read it, decide if the signal is real.
+Data: `phase1/round2/algo/data/prices_round_2_day_<D>.csv` and `trades_round_2_day_<D>.csv`
+Days available: -1, 0, 1
 
-### 2. Strategy decision via orchestrator
+### 2. Strategy decision
 ```
-@orchestrator researcher found +1000/day trend on INTARIAN_PEPPER_ROOT.
-Should we add a trend bias to the EMA MM? What parameters?
+@orchestrator researcher found [X]. Should we adjust [param]?
 ```
-Returns a spec ("use slow EMA alpha=0.05, lean long by inventory skew"). No code yet — just a decision.
+Returns spec only — no code.
 
-### 3. Coder implements from the spec
+### 3. Implement
 ```
-@coder implement EMA MM for INTARIAN_PEPPER_ROOT, alpha=0.05, EDGE=3, trend bias long.
-Keep ASH_COATED_OSMIUM untouched.
+@coder implement [change] in trader.py at repo root
 ```
-Reads `trader.py`, makes minimal change, runs backtest, iterates if regression, returns PnL summary table.
+Reads `trader.py`, minimal diff, runs `prosperity3bt trader.py 2`, iterates on regression, returns PnL table.
+New file from scratch → start from `misc/trader_structure.py`.
 
 ### 4. Review
 ```
 /review
 ```
-Returns PASS or FAIL with line references. If FAIL → `@coder fix line X` → re-review.
+Returns PASS or FAIL. On FAIL → `@coder fix line X` → re-review.
 
 ### 5. Submit on PASS
-Upload `trader.py` to the Prosperity portal.
+Upload `trader.py` (repo root) to Prosperity portal.
 
 ---
 
-## Why this flow minimizes cost
+## Why Agents Stay Separated
 
-Each agent carries only what it needs — no step loads everything at once:
+Each agent loads only what it needs:
 
 | Step | What loads |
 |------|-----------|
-| @researcher | Researcher agent + CSV data |
-| @orchestrator decision | Orchestrator + 15-line findings summary |
-| @coder | Coder agent + trader.py |
-| /review | Reviewer agent + trader.py |
+| @researcher | CSV data from `phase1/round2/algo/data/` |
+| @orchestrator | 15-line findings summary from researcher |
+| @coder | `trader.py` at repo root |
+| /review | `trader.py` at repo root |
 
-> Never ask one agent to "research + implement + review" in one prompt. That collapses the separation and burns tokens.
+> Never ask one agent to "research + implement + review" — that collapses the separation.
 
 ---
 
-## Round 1 Product Summary
+## Round 2 Product Summary
 
-| Product | FV | Limit | Key Signal | Strategy |
+| Product | FV | Limit | Key Signals | Strategy |
 |---|---|---|---|---|
-| ASH_COATED_OSMIUM | 10,000 (fixed) | 80 | ACF lag-1 = -0.495, imbalance r=0.38 | Fixed FV MM + imbalance tilt |
-| INTARIAN_PEPPER_ROOT | EMA alpha=0.05 | 80 | +1000/day linear ramp, imbalance r=0.385 | Dynamic FV MM + trend bias long |
+| ASH_COATED_OSMIUM | 10,000 (fixed) | 80 | ACF=-0.495, OBI directional r=+0.38 | Fixed FV MM + imbalance tilt |
+| INTARIAN_PEPPER_ROOT | Holt's (α=0.20, β=0.10) | 80 | +1000/day ramp, OBI contrarian β=-0.65, Z-momentum r=+0.46 | Passive MM only — no aggressive takes |
 
-Cross-product: zero correlation, no lead-lag, no pairs trade.
-
----
-
-## New Round Flow
-
-```
-1. /new-round
-2. Drop new CSVs into data/round<N>/
-3. @researcher analyze [new products]
-4. @coder implement strategy for [new products]
-5. /review
-6. Submit
-```
+MAF: `bid()` in `class Trader` — top 50% of bidders get 25% extra quotes. Bid subtracted from R2 profits if accepted.
 
 ---
 
@@ -102,15 +120,22 @@ Cross-product: zero correlation, no lead-lag, no pairs trade.
 
 | File | Why |
 |------|-----|
-| `datamodel.py` | Provided by IMC, overwritten each round |
-| `tradertest.py` | Jack's reference copy, read only |
+| `datamodel.py` (root) | Provided by IMC, overwritten each round |
+| `tradertest.py` | No longer in active use |
 
-**Submit file: always `trader.py`**
+**Submit: always `trader.py` at repo root**
 
 ---
 
-## Backtest Command (Round 1)
+## Backtest
 ```bash
-prosperity3bt trader.py 1
-# If not on PATH, use the full venv path: <your_venv>/bin/prosperity3bt trader.py 1
+# From repo root: imc-prosperity-4/imc-prosperity-4/
+prosperity3bt trader.py 2
+
+# If not on PATH:
+$(find ~ -name prosperity3bt 2>/dev/null | head -1) trader.py 2
 ```
+
+## Reference
+- `misc/ALGO_STRUCTURE.md` — full API reference (TradingState, OrderDepth, Order, position limits, traderData)
+- `misc/trader_structure.py` — minimal Trader class skeleton
