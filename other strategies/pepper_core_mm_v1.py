@@ -11,12 +11,12 @@ from datamodel import Observation, Order, OrderDepth, TradingState
 
 PEPPER = "INTARIAN_PEPPER_ROOT"
 POSITION_LIMIT = 80
-CORE_POSITION = 50
+CORE_POSITION = 40
 
 DEFAULT_PRICES_PATH = "data/round1/prices_round_1_day_0.csv"
 DEFAULT_TRADES_PATH = "data/round1/trades_round_1_day_0.csv"
-DEFAULT_OUTPUT_PATH = "phase1/round1/algo/dashboard/examples/backtest_trades_pepper_structural_v1_day_0_generated.csv"
-DEFAULT_OUTPUT_TEMPLATE = "phase1/round1/algo/dashboard/examples/backtest_trades_pepper_structural_v1_day_{day}_generated.csv"
+DEFAULT_OUTPUT_PATH = "dashboard_round1/examples/backtest_trades_pepper_core_mm_v1_day_0_generated.csv"
+DEFAULT_OUTPUT_TEMPLATE = "dashboard_round1/examples/backtest_trades_pepper_core_mm_v1_day_{day}_generated.csv"
 
 
 class Trader:
@@ -609,7 +609,7 @@ def export_all_round_files(prices_path: str, trades_path: str, output_template: 
 
 
 def _parse_args():
-    parser = argparse.ArgumentParser(description="Export PEPPER core=50 variant overlays")
+    parser = argparse.ArgumentParser(description="Export PEPPER core-long plus market-making overlays")
     parser.add_argument("--prices", default=DEFAULT_PRICES_PATH, help="Path to a Prosperity prices CSV")
     parser.add_argument("--trades", default=DEFAULT_TRADES_PATH, help="Path to a Prosperity trades CSV")
     parser.add_argument("--out", default=DEFAULT_OUTPUT_PATH, help="Output CSV for the dashboard overlay")

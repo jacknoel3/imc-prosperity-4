@@ -25,14 +25,24 @@ You are a systematic algo trader and Python developer. You do all implementation
 
 ## trader.py Patterns (follow exactly)
 - Constants block at top: `*_LIMIT`, `*_FV`, `*_EDGE` per product
+- Always include `def bid(self): return 0` — required for Round 2, ignored elsewhere
 - `run()` dispatches by symbol, persists state as JSON in traderData
 - One private method per product: `_trade_<product>(depth, pos, ...)`
 - `buy_capacity = limit - pos`, `sell_capacity = limit + pos`
 - Update `pos` locally after each aggressive fill before posting passives
+- **Aggregated qty rule**: the exchange sums ALL buy orders submitted and rejects the entire side if the total > `limit - pos`. Tracking pos through fills and capping passive at `limit - pos` ensures the math is safe.
 - `sell_orders` values are negative — use `-ask_vol` for qty
 - All prices cast to `int` before `Order()`
 - Passive quotes: guard `bid < best_ask` and `ask > best_bid` before appending
 - Zero `print()` calls — use traderData for debug state if needed
+- Orders not filled in the current tick are cancelled automatically — never assume a passive order from last tick is still live
+
+## IPR-Specific Invariants (enforce on every edit to `_trade_ipr`)
+- **NO aggressive takes** — crossing the 13-tick spread costs ~13 ticks; signal ≈ 1.5 ticks → net loss guaranteed
+- **OBI is CONTRARIAN**: `OBI > +0.15 → suppress bid` (not ask). High bid volume predicts DOWN. Do NOT follow OBI direction.
+- **Micro-price Z** uses all 3 book levels for volume; momentum — Z > 1.0 → suppress ask; Z < -1.0 → suppress bid
+- **Never go net short** — shorts fight a +1000/day trend; enforce `if pos < 0: add +1 short penalty to both quotes`
+- **Holt's state** (`level`, `trend`) must be read from and written to `ts` in `traderData` every tick
 
 ## Adding a New Product
 ```python
@@ -43,7 +53,8 @@ NEW_LIMIT = X
 elif symbol == "NEW_PRODUCT":
     result[symbol] = self._trade_new_product(depth, pos)
 
-# 3. Implement following _trade_ash_coated_osmium (fixed FV) or _trade_intarian_pepper_root (EMA FV) pattern
+# 3. For stationary FV → follow _trade_ash_coated_osmium pattern (directional OBI, fixed FV)
+#    For trending FV  → follow _trade_ipr pattern (contrarian OBI, Holt's FV, never aggressive)
 ```
 
 ## Output Format — Always Return This Block, Nothing Else

@@ -22,7 +22,8 @@ You are a rigorous code reviewer. You do the full review yourself and return onl
 ### Submission
 - [ ] Class `Trader`, method `def run(self, state: TradingState)`
 - [ ] All return paths return `tuple[dict[str, list[Order]], int, str]`
-- [ ] Imports: stdlib + datamodel only
+- [ ] `bid()` method present (required for Round 2, ignored elsewhere — always include)
+- [ ] Imports: stdlib + datamodel only (jsonpickle is also permitted)
 - [ ] Zero `print()` calls
 - [ ] `traderData` deserialization in try/except
 
@@ -30,6 +31,7 @@ You are a rigorous code reviewer. You do the full review yourself and return onl
 - [ ] Aggressive orders respect limit before passive orders are posted
 - [ ] `pos` updated locally after each aggressive fill
 - [ ] `buy_capacity = limit - pos`, `sell_capacity = limit + pos` pattern used correctly
+- [ ] **Aggregated quantity check**: total of all buy orders submitted ≤ `limit - pos`; total of all sell orders ≤ `limit + pos`. If either side exceeds the limit, the entire side is rejected — not just the excess. Verify aggressive + passive totals don't overrun this.
 - [ ] Limit constants match the round spec: ASH_COATED_OSMIUM = 80, INTARIAN_PEPPER_ROOT = 80
 
 ### Coverage
@@ -39,8 +41,14 @@ You are a rigorous code reviewer. You do the full review yourself and return onl
 ### Strategy Logic
 - [ ] `sell_orders` values negated correctly in qty math (`-ask_vol`)
 - [ ] No empty book access without None guard
-- [ ] EMA/state initialized safely for tick 0
+- [ ] Holt's state (`level`, `trend`) initialized safely and persisted in traderData
 - [ ] Passive quotes guarded against crossing the book
+
+### IPR-Specific (common errors)
+- [ ] No aggressive takes in `_trade_ipr` — market orders cost ~13 ticks, signal ≈ 1.5 ticks
+- [ ] OBI skew is CONTRARIAN: `OBI > threshold → suppress bid` (NOT ask). High bid vol → price DOWN.
+- [ ] No net short position allowed — shorts fight the +1000/day trend
+- [ ] Micro-price Z uses 3-level book volumes (not just level 1)
 
 ### Risk
 - [ ] No hardcoded historical prices as fair value without fallback

@@ -9,38 +9,24 @@ from typing import Dict, List, Optional, Tuple
 from datamodel import Observation, Order, OrderDepth, TradingState
 
 
-ASH = "ASH_COATED_OSMIUM"
 PEPPER = "INTARIAN_PEPPER_ROOT"
-
-LIMITS = {
-    ASH: 80,
-    PEPPER: 80,
-}
+POSITION_LIMIT = 80
+CORE_POSITION = 50
 
 DEFAULT_PRICES_PATH = "data/round1/prices_round_1_day_0.csv"
 DEFAULT_TRADES_PATH = "data/round1/trades_round_1_day_0.csv"
-DEFAULT_OUTPUT_PATH = "phase1/round1/algo/dashboard/examples/backtest_trades_gui_round1_v1_day_0_generated.csv"
-DEFAULT_OUTPUT_TEMPLATE = "phase1/round1/algo/dashboard/examples/backtest_trades_gui_round1_v1_day_{day}_generated.csv"
+DEFAULT_OUTPUT_PATH = "dashboard_round1/examples/backtest_trades_pepper_structural_v1_day_0_generated.csv"
+DEFAULT_OUTPUT_TEMPLATE = "dashboard_round1/examples/backtest_trades_pepper_structural_v1_day_{day}_generated.csv"
 
 
 class Trader:
     def run(self, state: TradingState):
         trader_state = self._load_state(state.traderData)
+        pepper_state = trader_state.get(PEPPER, {})
         result: Dict[str, List[Order]] = {}
 
-        ash_state = trader_state.get(ASH, {})
-        pepper_state = trader_state.get(PEPPER, {})
-
         for product, depth in state.order_depths.items():
-            if product == ASH:
-                orders, ash_state = self._trade_ash(
-                    depth=depth,
-                    position=state.position.get(ASH, 0),
-                    prev_state=ash_state,
-                    timestamp=int(state.timestamp),
-                )
-                result[product] = orders
-            elif product == PEPPER:
+            if product == PEPPER:
                 orders, pepper_state = self._trade_pepper(
                     depth=depth,
                     position=state.position.get(PEPPER, 0),
@@ -51,140 +37,8 @@ class Trader:
             else:
                 result[product] = []
 
-        new_state = json.dumps(
-            {
-                ASH: ash_state,
-                PEPPER: pepper_state,
-            },
-            separators=(",", ":"),
-        )
+        new_state = json.dumps({PEPPER: pepper_state}, separators=(",", ":"))
         return result, 0, new_state
-
-    def _trade_ash(
-        self,
-        depth: OrderDepth,
-        position: int,
-        prev_state: Dict[str, float],
-        timestamp: int,
-    ) -> Tuple[List[Order], Dict[str, float]]:
-        orders: List[Order] = []
-        book = self._book_snapshot(depth)
-        if book is None:
-            return orders, prev_state
-
-        best_bid, best_bid_volume, best_ask, best_ask_volume, mid, spread, imbalance, microprice = book
-
-        fixed_fair = 10000.0
-        limit = LIMITS[ASH]
-        edge = 2
-        take_clip = 18
-
-        prev_mid = self._as_float(prev_state.get("last_mid"), mid)
-        last_move = mid - prev_mid
-        fair_value = fixed_fair
-
-        buy_capacity = max(0, limit - position)
-        sell_capacity = max(0, limit + position)
-
-        # Emerald-like taker logic: cross only when the book is clearly through fixed fair value.
-        for ask_price, ask_volume in sorted(depth.sell_orders.items()):
-            available = abs(ask_volume)
-            if available <= 0 or buy_capacity <= 0 or ask_price >= fixed_fair:
-                break
-            clip = min(available, buy_capacity, take_clip)
-            if clip <= 0:
-                continue
-            orders.append(Order(ASH, ask_price, clip))
-            position += clip
-            buy_capacity = max(0, limit - position)
-            sell_capacity = max(0, limit + position)
-
-        for bid_price, bid_volume in sorted(depth.buy_orders.items(), reverse=True):
-            available = bid_volume
-            if available <= 0 or sell_capacity <= 0 or bid_price <= fixed_fair:
-                break
-            clip = min(available, sell_capacity, take_clip)
-            if clip <= 0:
-                continue
-            orders.append(Order(ASH, bid_price, -clip))
-            position -= clip
-            buy_capacity = max(0, limit - position)
-            sell_capacity = max(0, limit + position)
-
-        # When inventory is stretched, allow cheap flattening at fair value itself.
-        if best_ask == fixed_fair and position < -18 and buy_capacity > 0:
-            clip = min(abs(depth.sell_orders[best_ask]), buy_capacity, min(12, -position))
-            if clip > 0:
-                orders.append(Order(ASH, best_ask, clip))
-                position += clip
-                buy_capacity = max(0, limit - position)
-                sell_capacity = max(0, limit + position)
-
-        if best_bid == fixed_fair and position > 18 and sell_capacity > 0:
-            clip = min(depth.buy_orders[best_bid], sell_capacity, min(12, position))
-            if clip > 0:
-                orders.append(Order(ASH, best_bid, -clip))
-                position -= clip
-                buy_capacity = max(0, limit - position)
-                sell_capacity = max(0, limit + position)
-
-        inventory_ratio = position / limit
-        imbalance_tilt = 0
-        if imbalance > 0.25:
-            imbalance_tilt = 1
-        elif imbalance < -0.25:
-            imbalance_tilt = -1
-
-        mean_revert_tilt = 0
-        if last_move > 1.2:
-            mean_revert_tilt = -1
-        elif last_move < -1.2:
-            mean_revert_tilt = 1
-
-        inventory_skew = int(round(inventory_ratio * 3.0))
-        quote_shift = imbalance_tilt + mean_revert_tilt - inventory_skew
-
-        target_bid = int(fixed_fair - edge + quote_shift)
-        target_ask = int(fixed_fair + edge + quote_shift)
-
-        passive_bid = min(best_bid + 1, target_bid)
-        passive_ask = max(best_ask - 1, target_ask)
-
-        if spread <= 2:
-            passive_bid = min(best_bid, target_bid)
-            passive_ask = max(best_ask, target_ask)
-
-        passive_bid, passive_ask = self._sanitize_quotes(passive_bid, passive_ask, best_bid, best_ask)
-
-        buy_scale = max(0.3, 0.95 - max(0.0, inventory_ratio) * 0.75)
-        sell_scale = max(0.3, 0.95 - max(0.0, -inventory_ratio) * 0.75)
-        front_buy = min(buy_capacity, max(1, int(min(buy_capacity, 16) * buy_scale))) if buy_capacity > 0 else 0
-        front_sell = min(sell_capacity, max(1, int(min(sell_capacity, 16) * sell_scale))) if sell_capacity > 0 else 0
-
-        if front_buy > 0:
-            orders.append(Order(ASH, passive_bid, front_buy))
-        if front_sell > 0:
-            orders.append(Order(ASH, passive_ask, -front_sell))
-
-        residual_buy = max(0, buy_capacity - front_buy)
-        residual_sell = max(0, sell_capacity - front_sell)
-
-        if residual_buy > 0 and position < 20 and passive_bid - 1 > 0:
-            second_buy = min(residual_buy, max(2, max(1, front_buy // 2)))
-            if second_buy > 0:
-                orders.append(Order(ASH, passive_bid - 1, second_buy))
-
-        if residual_sell > 0 and position > -20:
-            second_sell = min(residual_sell, max(2, max(1, front_sell // 2)))
-            if second_sell > 0:
-                orders.append(Order(ASH, passive_ask + 1, -second_sell))
-
-        new_state = {
-            "fair_value": fair_value,
-            "last_mid": mid,
-            "last_timestamp": timestamp,
-        }
-        return orders, new_state
 
     def _trade_pepper(
         self,
@@ -198,15 +52,9 @@ class Trader:
         if book is None:
             return orders, prev_state
 
-        best_bid, best_bid_volume, best_ask, best_ask_volume, mid, spread, imbalance, microprice = book
+        best_bid, _, best_ask, _, mid, spread, imbalance, microprice = book
 
-        limit = LIMITS[PEPPER]
-        working_limit = 64
-        unwind_start = 46
-        danger_start = 68
         trend_per_step = 0.1002
-        base_inventory_target = 12
-
         prev_mid = self._as_float(prev_state.get("last_mid"), mid)
         prev_fair = self._as_float(prev_state.get("fair_value"), mid)
         prev_step = int(prev_state.get("step_index", 0))
@@ -222,7 +70,7 @@ class Trader:
             day_anchor = prev_anchor
 
         anchor_measurement = mid - trend_per_step * step_index
-        day_anchor = 0.84 * day_anchor + 0.16 * anchor_measurement
+        day_anchor = 0.87 * day_anchor + 0.13 * anchor_measurement
         trend_fair = day_anchor + trend_per_step * step_index
 
         expected_step_move = (
@@ -232,46 +80,53 @@ class Trader:
         )
         residual_move = (mid - prev_mid) - expected_step_move
         signal_strength = (
-            0.82 * (microprice - mid)
-            + 2.65 * imbalance
-            - 0.50 * residual_move
-            + 0.22
+            0.85 * (microprice - mid)
+            + 2.7 * imbalance
+            - 0.45 * residual_move
+            + 0.18
         )
 
-        measurement = trend_fair + signal_strength
-        fair_value = 0.62 * prev_fair + 0.38 * measurement
+        fair_measurement = trend_fair + signal_strength
+        fair_value = 0.66 * prev_fair + 0.34 * fair_measurement
 
-        inventory_target = base_inventory_target
-        if signal_strength > 1.5:
-            inventory_target += 8
-        elif signal_strength > 0.8:
-            inventory_target += 4
-        elif signal_strength < -1.4:
-            inventory_target -= 8
-        elif signal_strength < -0.8:
-            inventory_target -= 4
-        inventory_target = max(2, min(24, inventory_target))
+        overlay_target = 0
+        if signal_strength > 1.7:
+            overlay_target = 18
+        elif signal_strength > 0.9:
+            overlay_target = 10
+        elif signal_strength > 0.2:
+            overlay_target = 4
+        target_position = CORE_POSITION + overlay_target
 
-        target_gap = position - inventory_target
-        inventory_ratio = target_gap / limit
-        inventory_pressure = target_gap / working_limit
-        reservation_price = fair_value - 2.15 * inventory_ratio
+        # Preserve the core long. The inventory above the core is the tradable overlay.
+        sell_floor = CORE_POSITION
+        buy_capacity = max(0, POSITION_LIMIT - position)
+        sell_capacity = max(0, position - sell_floor)
 
-        buy_capacity = max(0, min(limit - position, working_limit - target_gap))
-        sell_capacity = max(0, min(limit + position, working_limit + target_gap))
+        target_gap = position - target_position
+        inventory_ratio = target_gap / POSITION_LIMIT
+        reservation_price = fair_value - 1.75 * inventory_ratio
 
-        buy_take_threshold = 2.4 + max(0.0, inventory_pressure) * 1.8
-        sell_take_threshold = 4.3 + max(0.0, -inventory_pressure) * 2.0
+        build_shortfall = max(0, CORE_POSITION - position)
+        build_mode = build_shortfall > 0
+        overlay_inventory = max(0, position - CORE_POSITION)
 
-        if imbalance > 0.40:
-            buy_take_threshold -= 0.7
-        if imbalance < -0.40:
-            sell_take_threshold -= 0.5
+        buy_take_threshold = 1.7
+        sell_take_threshold = 2.8
+        if spread <= 8:
+            buy_take_threshold -= 0.25
+            sell_take_threshold -= 0.20
+        elif spread >= 16:
+            buy_take_threshold += 0.25
+            sell_take_threshold += 0.35
 
-        if position <= -unwind_start:
-            buy_take_threshold -= 1.2
-        if position >= unwind_start:
-            sell_take_threshold -= 1.4
+        if imbalance > 0.35:
+            buy_take_threshold -= 0.35
+        if imbalance < -0.35:
+            sell_take_threshold -= 0.25
+
+        if build_mode:
+            buy_take_threshold -= 0.9
 
         buy_taken = 0
         for ask_price, ask_volume in sorted(depth.sell_orders.items()):
@@ -280,25 +135,28 @@ class Trader:
                 continue
 
             edge = reservation_price - ask_price
-            strong_up_signal = imbalance > 0.72 and signal_strength > 1.5
-            should_take = edge >= buy_take_threshold
+            should_take = build_mode and ask_price <= best_ask + 2
+            should_take = should_take or edge >= buy_take_threshold
             should_take = should_take or (
                 ask_price <= math.floor(trend_fair) and signal_strength > 0.5
             )
-            should_take = should_take or (strong_up_signal and ask_price <= math.floor(fair_value))
-            should_take = should_take or (position <= -danger_start and ask_price <= best_ask + 1)
+            should_take = should_take or (
+                position < CORE_POSITION and ask_price <= math.ceil(fair_value) + 1
+            )
 
             if not should_take:
                 break
 
-            clip = min(available, buy_capacity, self._take_clip(position, True, limit))
+            clip = min(available, buy_capacity, self._take_clip(position, True))
             if clip <= 0:
                 continue
             orders.append(Order(PEPPER, ask_price, clip))
             position += clip
-            buy_capacity -= clip
-            sell_capacity = max(0, min(limit + position, working_limit + inventory_target - position))
+            buy_capacity = max(0, POSITION_LIMIT - position)
+            sell_capacity = max(0, position - sell_floor)
             buy_taken += clip
+            build_shortfall = max(0, CORE_POSITION - position)
+            build_mode = build_shortfall > 0
 
         sell_taken = 0
         for bid_price, bid_volume in sorted(depth.buy_orders.items(), reverse=True):
@@ -307,61 +165,55 @@ class Trader:
                 continue
 
             edge = bid_price - reservation_price
-            strong_down_signal = imbalance < -0.80 and signal_strength < -2.2
-            should_take = edge >= sell_take_threshold
-            should_take = should_take or (strong_down_signal and bid_price >= math.ceil(fair_value) + 1)
+            rich_vs_trend = bid_price >= math.ceil(trend_fair) + 2
+            should_take = edge >= sell_take_threshold and position > target_position
             should_take = should_take or (
-                position >= danger_start and bid_price >= best_bid - 1
+                signal_strength < -1.3 and rich_vs_trend and position > CORE_POSITION + 6
             )
             should_take = should_take or (
-                position > inventory_target + 18 and bid_price >= math.ceil(trend_fair)
+                position > target_position + 10 and bid_price >= math.ceil(fair_value)
             )
 
             if not should_take:
                 break
 
-            clip = min(available, sell_capacity, self._take_clip(position, False, limit))
+            clip = min(available, sell_capacity, self._take_clip(position, False))
             if clip <= 0:
                 continue
             orders.append(Order(PEPPER, bid_price, -clip))
             position -= clip
-            sell_capacity -= clip
-            buy_capacity = max(0, min(limit - position, working_limit - (position - inventory_target)))
+            buy_capacity = max(0, POSITION_LIMIT - position)
+            sell_capacity = max(0, position - sell_floor)
             sell_taken += clip
 
-        target_gap = position - inventory_target
-        inventory_ratio = target_gap / limit
-        reservation_price = fair_value - 2.15 * inventory_ratio
+        target_gap = position - target_position
+        inventory_ratio = target_gap / POSITION_LIMIT
+        overlay_inventory = max(0, position - CORE_POSITION)
+        reservation_price = fair_value - 1.75 * inventory_ratio
 
-        bid_edge = 1.25
-        ask_edge = 2.45
+        bid_edge = 0.95
+        ask_edge = 1.55
         if spread <= 8:
-            bid_edge = 0.9
-            ask_edge = 1.7
+            bid_edge = 0.70
+            ask_edge = 1.25
         elif spread >= 16:
-            bid_edge = 1.55
-            ask_edge = 2.8
+            bid_edge = 1.15
+            ask_edge = 1.85
 
         if signal_strength > 0.9:
-            bid_edge -= 0.35
-            ask_edge += 0.25
+            bid_edge -= 0.20
+            ask_edge += 0.20
         elif signal_strength < -0.9:
-            bid_edge += 0.35
-            ask_edge -= 0.45
+            bid_edge += 0.20
+            ask_edge -= 0.15
 
-        if position < inventory_target:
-            bid_edge -= 0.25
-            ask_edge += 0.15
-        elif position > inventory_target:
-            bid_edge += 0.2
-            ask_edge -= 0.3
-
-        if position >= unwind_start:
-            bid_edge += 0.55
-            ask_edge -= 0.65
-        elif position <= -unwind_start:
-            bid_edge -= 0.55
-            ask_edge += 0.55
+        if position < CORE_POSITION:
+            bid_edge -= 0.35
+            ask_edge += 0.50
+        elif overlay_inventory <= 6:
+            ask_edge += 0.35
+        elif overlay_inventory >= 18:
+            ask_edge -= 0.20
 
         target_bid = int(math.floor(reservation_price - bid_edge))
         target_ask = int(math.ceil(reservation_price + ask_edge))
@@ -373,28 +225,27 @@ class Trader:
         front_buy = self._quote_size(
             capacity=buy_capacity,
             position=position,
-            limit=limit,
+            target_position=target_position,
             side="buy",
-            target_position=inventory_target,
             took_liquidity=buy_taken > 0,
         )
         front_sell = self._quote_size(
             capacity=sell_capacity,
             position=position,
-            limit=limit,
+            target_position=target_position,
             side="sell",
-            target_position=inventory_target,
             took_liquidity=sell_taken > 0,
         )
 
-        if position < inventory_target:
-            front_buy = min(buy_capacity, front_buy + 2)
-            front_sell = max(0, front_sell - 1)
-        elif position > inventory_target + 8:
-            front_buy = max(0, front_buy - 1)
+        if position < CORE_POSITION:
+            front_buy = min(buy_capacity, front_buy + 4)
+            front_sell = 0
+        elif position <= CORE_POSITION + 4:
+            front_sell = 0
+        elif position > target_position + 8:
             front_sell = min(sell_capacity, front_sell + 2)
 
-        if front_buy > 0:
+        if front_buy > 0 and passive_bid > 0:
             orders.append(Order(PEPPER, passive_bid, front_buy))
         if front_sell > 0:
             orders.append(Order(PEPPER, passive_ask, -front_sell))
@@ -402,13 +253,15 @@ class Trader:
         residual_buy = max(0, buy_capacity - front_buy)
         residual_sell = max(0, sell_capacity - front_sell)
 
-        if residual_buy > 0 and position < inventory_target + 22 and passive_bid - 1 > 0:
-            second_buy = min(residual_buy, max(2, (front_buy + 1) // 2))
+        if residual_buy > 0 and passive_bid - 1 > 0 and position < target_position + 14:
+            second_buy = min(residual_buy, max(2, (front_buy + 2) // 2))
+            if position < CORE_POSITION:
+                second_buy = min(residual_buy, second_buy + 2)
             if second_buy > 0:
                 orders.append(Order(PEPPER, passive_bid - 1, second_buy))
 
-        if residual_sell > 0 and position > inventory_target - 14:
-            second_sell = min(residual_sell, max(2, front_sell // 2))
+        if residual_sell > 0 and position > CORE_POSITION + 10:
+            second_sell = min(residual_sell, max(2, front_sell // 2 if front_sell > 0 else 2))
             if second_sell > 0:
                 orders.append(Order(PEPPER, passive_ask + 1, -second_sell))
 
@@ -462,9 +315,8 @@ class Trader:
         self,
         capacity: int,
         position: int,
-        limit: int,
-        side: str,
         target_position: int,
+        side: str,
         took_liquidity: bool,
     ) -> int:
         if capacity <= 0:
@@ -472,23 +324,22 @@ class Trader:
 
         target_gap = position - target_position
         if side == "buy":
-            pressure = max(0.0, target_gap / limit)
+            pressure = max(0.0, target_gap / POSITION_LIMIT)
         else:
-            pressure = max(0.0, -target_gap / limit)
+            pressure = max(0.0, -target_gap / POSITION_LIMIT)
 
-        scale = 0.42 if not took_liquidity else 0.31
-        scale -= 0.24 * pressure
-        scale = max(0.12, min(0.55, scale))
+        scale = 0.38 if not took_liquidity else 0.28
+        scale -= 0.22 * pressure
+        scale = max(0.10, min(0.52, scale))
 
         size = int(capacity * scale)
-        size = max(2, min(14, size))
+        size = max(2, min(12, size))
         return min(size, capacity)
 
-    def _take_clip(self, position: int, buy_side: bool, limit: int) -> int:
-        heavy = 0.60 * limit
-        if buy_side and position > heavy:
-            return 5
-        if (not buy_side) and position < -heavy:
+    def _take_clip(self, position: int, buy_side: bool) -> int:
+        if buy_side and position >= CORE_POSITION + 24:
+            return 6
+        if (not buy_side) and position <= CORE_POSITION + 8:
             return 5
         return 12
 
@@ -517,9 +368,9 @@ def _load_price_snapshots(prices_path: str) -> Tuple[Dict[int, Dict[str, dict]],
             day_value = row.get("day", "")
             if day_value != "":
                 day_by_timestamp[timestamp] = int(float(day_value))
+
             product = row["product"]
             depth = OrderDepth()
-
             for level in (1, 2, 3):
                 bid_price = row.get(f"bid_price_{level}", "")
                 bid_volume = row.get(f"bid_volume_{level}", "")
@@ -529,7 +380,6 @@ def _load_price_snapshots(prices_path: str) -> Tuple[Dict[int, Dict[str, dict]],
                 if bid_price and bid_volume:
                     depth.buy_orders[int(float(bid_price))] = int(float(bid_volume))
                 if ask_price and ask_volume:
-                    # Prosperity order books store ask volume as negative.
                     depth.sell_orders[int(float(ask_price))] = -int(float(ask_volume))
 
             mid_price = float(row["mid_price"]) if row["mid_price"] else _compute_mid(depth)
@@ -616,8 +466,8 @@ def export_dashboard_overlay(
 
     trader = Trader()
     trader_data = ""
-    positions = {product: 0 for product in LIMITS}
-    cash = {product: 0.0 for product in LIMITS}
+    positions = {PEPPER: 0}
+    cash = {PEPPER: 0.0}
     overlay_rows = []
 
     for timestamp, products in snapshots.items():
@@ -625,6 +475,7 @@ def export_dashboard_overlay(
             snapshot_day = day_by_timestamp.get(timestamp)
             if snapshot_day is None or snapshot_day != day:
                 continue
+
         order_depths = {
             product: product_data["depth"]
             for product, product_data in products.items()
@@ -641,9 +492,8 @@ def export_dashboard_overlay(
         )
 
         result, _, trader_data = trader.run(state)
-
         for product, orders in result.items():
-            if product not in products:
+            if product != PEPPER or product not in products:
                 continue
 
             depth = products[product]["depth"]
@@ -675,7 +525,6 @@ def export_dashboard_overlay(
 
     output_file = Path(output_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)
-
     with open(output_file, "w", newline="") as handle:
         writer = csv.DictWriter(
             handle,
@@ -721,22 +570,26 @@ def _extract_day_from_name(path: str) -> Optional[int]:
 
 
 def export_all_round_files(prices_path: str, trades_path: str, output_template: str):
-    prices_file = Path(prices_path)
-    trades_file = Path(trades_path)
-    prices_dir = prices_file.parent
-    trades_dir = trades_file.parent
+    prices_dir = Path(prices_path).parent
+    trades_dir = Path(trades_path).parent
 
-    price_files = sorted(prices_dir.glob("prices_round_1_day_*.csv"))
-    trade_files = { _extract_day_from_name(path.name): path for path in trades_dir.glob("trades_round_1_day_*.csv") }
+    trade_files = {
+        _extract_day_from_name(path.name): path
+        for path in trades_dir.glob("trades_round_1_day_*.csv")
+    }
 
     summaries = []
-    for price_path in price_files:
+    for price_path in sorted(
+        prices_dir.glob("prices_round_1_day_*.csv"),
+        key=lambda path: _extract_day_from_name(path.name) if _extract_day_from_name(path.name) is not None else 999,
+    ):
         day = _extract_day_from_name(price_path.name)
         if day is None:
             continue
         trade_path = trade_files.get(day)
         if trade_path is None:
             continue
+
         output_path = output_template.format(day=day)
         summary = export_dashboard_overlay(
             prices_path=str(price_path),
@@ -756,7 +609,7 @@ def export_all_round_files(prices_path: str, trades_path: str, output_template: 
 
 
 def _parse_args():
-    parser = argparse.ArgumentParser(description="Export a dashboard overlay from jack_round1_v1.py")
+    parser = argparse.ArgumentParser(description="Export PEPPER core=50 variant overlays")
     parser.add_argument("--prices", default=DEFAULT_PRICES_PATH, help="Path to a Prosperity prices CSV")
     parser.add_argument("--trades", default=DEFAULT_TRADES_PATH, help="Path to a Prosperity trades CSV")
     parser.add_argument("--out", default=DEFAULT_OUTPUT_PATH, help="Output CSV for the dashboard overlay")

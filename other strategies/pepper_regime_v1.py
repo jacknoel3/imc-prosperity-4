@@ -15,8 +15,8 @@ CORE_POSITION = 40
 
 DEFAULT_PRICES_PATH = "data/round1/prices_round_1_day_0.csv"
 DEFAULT_TRADES_PATH = "data/round1/trades_round_1_day_0.csv"
-DEFAULT_OUTPUT_PATH = "phase1/round1/algo/dashboard/examples/backtest_trades_pepper_core_mm_v1_day_0_generated.csv"
-DEFAULT_OUTPUT_TEMPLATE = "phase1/round1/algo/dashboard/examples/backtest_trades_pepper_core_mm_v1_day_{day}_generated.csv"
+DEFAULT_OUTPUT_PATH = "dashboard_round1/examples/backtest_trades_pepper_regime_v1_day_0_generated.csv"
+DEFAULT_OUTPUT_TEMPLATE = "dashboard_round1/examples/backtest_trades_pepper_regime_v1_day_{day}_generated.csv"
 
 
 class Trader:
@@ -85,6 +85,7 @@ class Trader:
             - 0.45 * residual_move
             + 0.18
         )
+        bullish_regime = signal_strength > 1.1 or (imbalance > 0.42 and microprice >= mid)
 
         fair_measurement = trend_fair + signal_strength
         fair_value = 0.66 * prev_fair + 0.34 * fair_measurement
@@ -166,13 +167,15 @@ class Trader:
 
             edge = bid_price - reservation_price
             rich_vs_trend = bid_price >= math.ceil(trend_fair) + 2
-            should_take = edge >= sell_take_threshold and position > target_position
-            should_take = should_take or (
-                signal_strength < -1.3 and rich_vs_trend and position > CORE_POSITION + 6
-            )
-            should_take = should_take or (
-                position > target_position + 10 and bid_price >= math.ceil(fair_value)
-            )
+            should_take = False
+            if not bullish_regime:
+                should_take = edge >= sell_take_threshold and position > target_position
+                should_take = should_take or (
+                    signal_strength < -1.3 and rich_vs_trend and position > CORE_POSITION + 6
+                )
+                should_take = should_take or (
+                    position > target_position + 10 and bid_price >= math.ceil(fair_value)
+                )
 
             if not should_take:
                 break
@@ -244,6 +247,8 @@ class Trader:
             front_sell = 0
         elif position > target_position + 8:
             front_sell = min(sell_capacity, front_sell + 2)
+        if bullish_regime:
+            front_sell = 0
 
         if front_buy > 0 and passive_bid > 0:
             orders.append(Order(PEPPER, passive_bid, front_buy))
@@ -260,7 +265,7 @@ class Trader:
             if second_buy > 0:
                 orders.append(Order(PEPPER, passive_bid - 1, second_buy))
 
-        if residual_sell > 0 and position > CORE_POSITION + 10:
+        if residual_sell > 0 and position > CORE_POSITION + 10 and not bullish_regime:
             second_sell = min(residual_sell, max(2, front_sell // 2 if front_sell > 0 else 2))
             if second_sell > 0:
                 orders.append(Order(PEPPER, passive_ask + 1, -second_sell))
@@ -609,7 +614,7 @@ def export_all_round_files(prices_path: str, trades_path: str, output_template: 
 
 
 def _parse_args():
-    parser = argparse.ArgumentParser(description="Export PEPPER core-long plus market-making overlays")
+    parser = argparse.ArgumentParser(description="Export PEPPER bullish-regime suppression overlays")
     parser.add_argument("--prices", default=DEFAULT_PRICES_PATH, help="Path to a Prosperity prices CSV")
     parser.add_argument("--trades", default=DEFAULT_TRADES_PATH, help="Path to a Prosperity trades CSV")
     parser.add_argument("--out", default=DEFAULT_OUTPUT_PATH, help="Output CSV for the dashboard overlay")

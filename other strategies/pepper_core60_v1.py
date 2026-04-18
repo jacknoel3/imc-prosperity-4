@@ -15,8 +15,8 @@ CORE_POSITION = 60
 
 DEFAULT_PRICES_PATH = "data/round1/prices_round_1_day_0.csv"
 DEFAULT_TRADES_PATH = "data/round1/trades_round_1_day_0.csv"
-DEFAULT_OUTPUT_PATH = "phase1/round1/algo/dashboard/examples/backtest_trades_pepper_core60_v1_day_0_generated.csv"
-DEFAULT_OUTPUT_TEMPLATE = "phase1/round1/algo/dashboard/examples/backtest_trades_pepper_core60_v1_day_{day}_generated.csv"
+DEFAULT_OUTPUT_PATH = "dashboard_round1/examples/backtest_trades_pepper_core60_v1_day_0_generated.csv"
+DEFAULT_OUTPUT_TEMPLATE = "dashboard_round1/examples/backtest_trades_pepper_core60_v1_day_{day}_generated.csv"
 
 
 class Trader:

@@ -28,9 +28,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | INTARIAN_PEPPER_ROOT | EMA (alpha=0.05), +1000/day trend | 80 | Dynamic FV MM + trend bias → see @.claude/rules/products/intarian_pepper_root.md |
 
 ## Data Findings Summary (Round 1)
-- **ASH_COATED_OSMIUM**: Near-fixed fair value around 10,000 with stronger local noise than pepper. Strong lag-1 mean-reversion in `Δmid` (ACF=-0.495). Imbalance is predictive (r≈0.38). Best treated as the more classical stationary market-making product.
-- **INTARIAN_PEPPER_ROOT**: Raw price level is not stationary, but the path is highly structured rather than noisy. It rises almost linearly at about +1000/day and about +0.1002 per tick; after removing that linear trend, residual volatility is low. Also shows lag-1 mean-reversion in `Δmid` (ACF=-0.501) and predictive imbalance (r≈0.385, slightly stronger at longer lags). Not fixed-FV, but steady after detrending.
-- **Cross-product**: Same-time correlation is near zero (r≈0.016), exhaustive lag sweeps stay economically weak, and conditional links are exploratory at best. Trade independently — no robust pairs/arbitrage strategy.
+- **ASH_COATED_OSMIUM**: Near-fixed fair value around 10,000. Strong lag-1 mean-reversion (ACF=-0.495). OBI is **directional** (r≈0.38, follow imbalance direction). Classical stationary MM product.
+- **INTARIAN_PEPPER_ROOT**: Trends +1000/day linearly, consistent across all 3 days (<3σ). Lag-1 ACF=-0.501. Three independent signals: (1) **OBI is CONTRARIAN** (beta=-0.55 to -0.78, p≈0) — high bid volume predicts price DOWN; (2) **Micro-price Z-score is momentum** (corr≈+0.46, p≈0) — use for quote suppression; (3) **Buy trades are informed** (+2.6 ticks fwd_10, t≈12), sell trades are noise. NEVER use market orders (13-tick spread, signal≈1.5 ticks → guaranteed loss). MM earns 11–12× buy-and-hold.
+- **Cross-product**: No robust pairs/arbitrage. Trade independently.
 
 ## Manual Challenge: "An Intarian Welcome"
 - Submit a single limit order (price + qty) for each product — you go last, no changes after
@@ -67,3 +67,4 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Verbose print() in submitted code
 - Hardcode historical prices without runtime fallback
 - Modify datamodel.py
+- Omit the `bid()` method — include it in every submission (`def bid(self): return 0` is fine; required for Round 2, ignored elsewhere)
