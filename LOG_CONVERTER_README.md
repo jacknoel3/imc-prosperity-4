@@ -1,172 +1,159 @@
-# Log Converter
+# IMC Prosperity Log Converter
 
-Converti i tuoi file log JSON di IMC Prosperity 4 in formato CSV.
+Convert your IMC Prosperity 4 JSON logs to CSV format for easy analysis and data exploration.
 
-## Funzionalità
+## Features
 
-- ✅ Converte log JSON in CSV strutturato
-- ✅ Gestisce automaticamente prezzi, volumi, posizioni e PnL
-- ✅ Aggrega dati di trade per timestamp
-- ✅ Supporta entrambi i prodotti: ASH_COATED_OSMIUM e INTARIAN_PEPPER_ROOT
-- ✅ Output lossless e leggibile
+- ✅ Converts JSON logs to structured CSV
+- ✅ Automatically handles prices, volumes, positions, and PnL
+- ✅ Aggregates trade data by timestamp
+- ✅ Supports both products: ASH_COATED_OSMIUM and INTARIAN_PEPPER_ROOT
+- ✅ Lossless and readable output
 
-## Installazione
+## Installation
 
-### Prerequisiti
-- Python 3.8 o superiore
+### Prerequisites
+- Python 3.8 or higher
 - pip
 
-### Opzione 1: Clone e installa localmente
+### Option 1: Clone and install locally
 
 ```bash
-git clone https://github.com/yourusername/log-converter.git
-cd log-converter
+git clone https://github.com/jacknoel3/imc-prosperity-4.git
+cd imc-prosperity-4
 
-# Installa le dipendenze
+# Install dependencies
 pip install pandas
 ```
 
-### Opzione 2: Installa come package (dopo publish su PyPI)
+## Usage
+
+### Method 1: Terminal (Windows, Mac, Linux)
 
 ```bash
-pip install imc-log-converter
-```
+# Navigate to the repo
+cd imc-prosperity-4
 
-## Uso
-
-### Metodo 1: Terminal (Windows, Mac, Linux)
-
-```bash
-# Metodo 1a: Con cd nella cartella
-cd log-converter
+# Convert a log file
 python -m log_converter your_session.log
 
-# Metodo 1b: Da qualsiasi cartella (dopo pip install)
-log-converter your_session.log
+# The CSV will be saved as: your_session_lossless.csv
 ```
 
-### Metodo 2: VS Code (Mac/Linux)
+### Method 2: VS Code (Mac/Linux)
 
-1. Apri il repo in VS Code
-2. Apri un file `.log` (oppure assicurati sia il file attivo)
-3. Premi `Cmd+Shift+B` (Mac) o `Ctrl+Shift+B` (Linux)
-4. Seleziona "Convert Log to CSV"
-5. ✅ Il CSV verrà salvato nella stessa cartella con suffisso `_lossless.csv`
+1. Open the repo in VS Code
+2. Open a `.log` file (or make sure it's the active file)
+3. Press `Cmd+Shift+B` (Mac) or `Ctrl+Shift+B` (Linux)
+4. Select "Convert Log to CSV"
+5. ✅ The CSV will be saved in the same folder with suffix `_lossless.csv`
 
 ## Input/Output
 
 ### Input
 ```
-your_session.log  (JSON file)
+your_session.log  (JSON file from IMC Prosperity)
 ```
 
 ### Output
 ```
-your_session_lossless.csv  (CSV con tutte le colonne di mercato)
+your_session_lossless.csv  (CSV with all market data columns)
 ```
 
-### Struttura CSV
+### CSV Structure
 
-Il file CSV conterrà:
-- `timestamp`: Orario dell'evento
-- `ash_coated_osmium_*`: Dati mercato ASH (bid/ask/volume/mid/spread/pnl)
-- `intarian_pepper_root_*`: Dati mercato IPR (bid/ask/volume/mid/spread/pnl)
-- `*_trade_price`, `*_trade_qty`, `*_trade_side`: Dettagli trade eseguiti
-- `algo_log`: Colonna di log aggiuntiva (vuota per ora)
+The CSV file will contain:
+- `timestamp`: Event timestamp
+- `ash_coated_osmium_*`: ASH market data (bid/ask/volume/mid/spread/pnl)
+- `intarian_pepper_root_*`: IPR market data (bid/ask/volume/mid/spread/pnl)
+- `*_trade_price`, `*_trade_qty`, `*_trade_side`: Executed trade details
+- `algo_log`: Additional log column (currently empty)
 
-## Esempio Completo
+## Complete Example
 
 ```bash
-# 1. Clone il repo
-git clone https://github.com/yourusername/log-converter.git
-cd log-converter
+# 1. Clone the repo
+git clone https://github.com/jacknoel3/imc-prosperity-4.git
+cd imc-prosperity-4
 
-# 2. Installa dipendenze
+# 2. Install dependencies
 pip install pandas
 
-# 3. Scarica il tuo file log da IMC Prosperity
-# (salva come: session_round2_day1.log)
+# 3. Download your log file from IMC Prosperity
+# (save as: session_round2_day1.log)
 
-# 4. Converti in CSV
+# 4. Convert to CSV
 python -m log_converter session_round2_day1.log
 
-# 5. Apri il CSV in Excel/Pandas/etc
+# 5. Open the CSV in Excel/Pandas/etc
 # session_round2_day1_lossless.csv ✅
 ```
 
 ## Troubleshooting
 
-### "File non trovato"
+### "File not found"
 ```bash
-# Assicurati che il file esista e sia nel percorso corretto
+# Ensure the file exists and is in the correct path
 ls -la your_session.log
 ```
 
-### "activitiesLog vuoto"
-Il file JSON non contiene il campo `activitiesLog`. Verifica che sia un log valido di IMC Prosperity.
+### "activitiesLog is empty"
+The JSON file does not contain the `activitiesLog` field. Verify it's a valid IMC Prosperity log.
 
 ### "ModuleNotFoundError: pandas"
 ```bash
-# Installa pandas
+# Install pandas
 pip install pandas
 ```
 
-### Task non appare in VS Code
-1. Assicurati di essere nella cartella del repo
-2. Ricarica VS Code (`Cmd+R`)
-3. Apri un file `.log`
-4. Prova `Cmd+Shift+B`
+### Task doesn't appear in VS Code
+1. Ensure you're in the repo folder
+2. Reload VS Code (`Cmd+R`)
+3. Open a `.log` file
+4. Try `Cmd+Shift+B`
 
-## Struttura Repo
+## Project Structure
 
 ```
-log-converter/
-├── log_converter/
-│   ├── __init__.py         # Package initialization
-│   ├── __main__.py         # CLI entry point
-│   └── converter.py        # Core conversion logic
-├── .vscode/
-│   └── tasks.json          # VS Code build task
-├── pyproject.toml          # Package metadata
-├── README.md               # This file
-├── LICENSE                 # MIT License
-└── .gitignore              # Git ignore rules
+log_converter/
+├── __init__.py         # Package initialization
+├── __main__.py         # CLI entry point
+└── converter.py        # Core conversion logic
 ```
 
-## Sviluppo
+## Development
 
-### Per estendere il converter
+### To extend the converter
 
-Modifica `log_converter/converter.py`:
-- Aggiungi nuovi prodotti nell'array `products`
-- Personalizza la mappatura delle colonne
-- Estendi la logica di aggregazione trade
+Edit `log_converter/converter.py`:
+- Add new products to the `products` array
+- Customize column mapping
+- Extend trade aggregation logic
 
-### Per testare localmente
+### To test locally
 
 ```bash
-# Copia un file .log di test nella cartella
+# Copy a test .log file to the folder
 cp ~/Downloads/session_123.log .
 
-# Esegui la conversione
+# Run the conversion
 python -m log_converter session_123.log
 
-# Verifica l'output
+# Verify the output
 head session_123_lossless.csv
 ```
 
-## Contributi
+## Contributing
 
-Per reportare bug o suggerire feature:
-1. Apri una Issue su GitHub
-2. Oppure fai una Pull Request
+To report bugs or suggest features:
+1. Open an Issue on GitHub
+2. Or submit a Pull Request
 
 ## License
 
-MIT License - vedi il file [LICENSE](LICENSE) per i dettagli.
+MIT License - see the [LICENSE](../LOG_CONVERTER_LICENSE) file for details.
 
 ## Support
 
-Per domande o problemi:
-- 📧 Email: your.email@example.com
-- 🐛 Issues: https://github.com/yourusername/log-converter/issues
+For questions or issues:
+- 🐛 Issues: https://github.com/jacknoel3/imc-prosperity-4/issues
