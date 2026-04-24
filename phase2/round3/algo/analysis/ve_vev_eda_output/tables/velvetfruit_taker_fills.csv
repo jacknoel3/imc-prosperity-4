@@ -1,0 +1,9 @@
+metric,value
+spread_mean,4.988133333333334
+spread_median,5.0
+spread_p95,6.0
+taker_buy_cost_mean,2.494066666666667
+taker_sell_cost_mean,2.494066666666667
+l1_depth_mean,37.8253
+typical_buy_size_mean,6.306017925736236
+depth_to_size_ratio,5.998286152284264
