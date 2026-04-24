@@ -1,24 +1,40 @@
 ## VELVETFRUIT_EXTRACT
-- Type: Delta-1 spot — also the **underlying** for all VEV vouchers
+- Fair value: **~5,250** (stationary — grand mean 5,250.1, std 15.6; creeps +9 ticks/day, negligible)
 - Position limit: 200
+- Spread: mean 5.0 (tightest of all R3 products), min 1, max 6
+- Tick volatility (std of Δmid): 1.13
+- Realized vol: **34.2% annualized** (consistent: 33.9%, 34.3%, 34.4% across 3 days) — use as σ for BS
 - Data: `phase2/round3/data/`
 
-### Known
-- Vouchers (VEV_4000…VEV_6500) are call options on this product
-- Its price process drives option value — must model accurately for BS pricing
-- No EDA yet
+### ACF Structure
+- Lag-1: **-0.159** (mean-reverting, moderate)
 
-### Questions to answer from EDA
-- Price level and range (sets ATM/OTM/ITM for each voucher strike)
-- Daily volatility (σ) — critical input for Black-Scholes
-- Trend or mean-reversion? (affects delta-hedging frequency)
-- OBI signal direction
-- Spread width
+### Imbalance Signal
+- corr(OBI, fwd_ret_1) = **-0.321** → **CONTRARIAN**
+- OBI > +0.15 → suppress bid; OBI < -0.15 → suppress ask
 
-### Strategy (placeholder)
-- Trade independently as a delta-1 MM
-- Also use price + vol estimates as inputs to VEV voucher pricing
-- Long exposure here partially offsets short-vega risk from selling vouchers (if applicable)
+### Market Structure
+- ~457 trades/day, avg qty 6, inter-trade ~726 ticks
+- Book depth at best: ~37.8 units bid/ask — deepest book in R3
+- Buyer/seller fields empty
+
+### Dual Role
+1. **Standalone MM**: passive MM around FV=5,250 with contrarian OBI tilt
+2. **Option underlying**: price + vol feed into BS pricing for all VEV vouchers
+
+### Delta Hedging (for voucher strategy)
+- VEV_5400 long → short 0.20 VEV per voucher to hedge delta
+- Hedge passively (5-tick spread means aggressive take is expensive but manageable vs IPR's 13-tick)
+- Net risk after hedge: gamma + vega
+
+### Constants
+```python
+VEV_FV       = 5250
+VEV_LIMIT    = 200
+VEV_EDGE     = 1          # tight spread — 1–2 tick edge
+VEV_OBI_THRESH = 0.15
+VEV_SIGMA    = 0.342      # realized annualized vol — update each day
+```
 
 ### Confidence
-None yet — update after EDA.
+High — three-day consistency, clean signals, stable realized vol. Tight spread makes delta hedging viable.

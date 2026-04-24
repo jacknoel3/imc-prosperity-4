@@ -138,11 +138,13 @@ Use this workflow every round so research, implementation, and validation stay a
 - Optimal b2: game-theory — bid just above expected avg_b2; without data on other teams, anchor near 800–850
 - Submit via Manual Challenge Overview window; last submission before deadline is locked
 
-## Data Findings Summary (Round 3 — update as EDA runs)
-- **HYDROGEL_PACK**: No findings yet — run EDA on `phase2/round3/data/`
-- **VELVETFRUIT_EXTRACT**: No findings yet — run EDA; this is the option underlying
-- **VEV vouchers**: No findings yet — fit Black-Scholes IV; compare implied vs realized vol; check moneyness across strikes
-- **Cross-product**: VEV vouchers are linked to VELVETFRUIT_EXTRACT by option pricing — delta-hedge or exploit IV mispricing
+## Data Findings Summary (Round 3)
+- **HYDROGEL_PACK**: FV≈10,000 (stationary). Spread mean 15.7. ACF lag-1=-0.129 (mean-reverting). OBI is **CONTRARIAN** (r=-0.327) — fade imbalance, do NOT follow it. ~337 trades/day, avg qty 4. Limit=200.
+- **VELVETFRUIT_EXTRACT**: FV≈5,250 (stationary, creeps +9 ticks/day — negligible). Spread mean 5.0 (tightest of all). ACF=-0.159. OBI **CONTRARIAN** (r=-0.321). Realized vol=**34.2% annualized** (stable across 3 days). Deep book (~38 units). ~457 trades/day, avg qty 6. Limit=200.
+- **VEV_4000/4500** (deep ITM): Delta≈1, price≈VEV−K, zero time value. Skip — no option edge.
+- **VEV_5000–5500** (ATM): Flat IV surface ~33–34%, slightly below realized vol (34.2%). VEV_5400 most mispriced: avg −3.8 ticks below BS, spread 1.4, 225 trades — **best single trade**. Delta hedge: short 0.2 VEV per voucher long.
+- **VEV_6000/6500** (deep OTM): Pinned at mid=0.5 (min tick), BS≈0. **SELL at ask=1** — free carry, P(ITM at expiry)≈0.3%. Sell full limit.
+- **Cross-product**: HGP and VEV structurally similar but uncorrelated — trade independently. Vouchers linked to VEV via BS pricing.
 
 ## Key Rules & References
 - See @.claude/rules/submission.md — hard constraints, never break

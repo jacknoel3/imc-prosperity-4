@@ -12,14 +12,14 @@ Data lives under the phase directories relative to repo root (`imc-prosperity-4/
 
 ```
 phase1/
-  round0/data/          ← EMERALDS, TOMATOES (archived, no algo/ subdir)
-  round1/algo/data/     ← ASH_COATED_OSMIUM, INTARIAN_PEPPER_ROOT (days -2, -1, 0)
-  round2/algo/data/     ← ASH_COATED_OSMIUM, INTARIAN_PEPPER_ROOT (days -1, 0, 1) ← CURRENT
+  round1/algo/data/     ← ASH_COATED_OSMIUM, INTARIAN_PEPPER_ROOT (archived)
+  round2/algo/data/     ← ASH_COATED_OSMIUM, INTARIAN_PEPPER_ROOT (archived)
 
-phase2/                 ← future rounds (empty until data drops)
+phase2/
+  round3/data/          ← HYDROGEL_PACK, VELVETFRUIT_EXTRACT, VEV vouchers ← CURRENT
+    prices_round_3_combined.csv
+    trades_round_3_combined.csv
 ```
-
-File naming: `prices_round_<N>_day_<D>.csv` and `trades_round_<N>_day_<D>.csv`
 
 Both CSVs use **semicolon** as separator.
 - Price CSV columns: `day;timestamp;product;bid_price_1;bid_volume_1;bid_price_2;bid_volume_2;bid_price_3;bid_volume_3;ask_price_1;ask_volume_1;ask_price_2;ask_volume_2;ask_price_3;ask_volume_3;mid_price;profit_and_loss`
@@ -44,8 +44,21 @@ Use Bash with python3 one-liners to compute stats directly from CSVs. Never past
 
 | Product | OBI direction | Intraday pattern | Key finding |
 |---------|--------------|-----------------|-------------|
-| ASH_COATED_OSMIUM | Directional (r=+0.38) | Stationary | FV=10000 fixed, ACF lag-1=-0.495 |
-| INTARIAN_PEPPER_ROOT | Contrarian (β=-0.65) | +1000/day linear ramp | Holt's FV, never aggressive, lean long |
+| ASH_COATED_OSMIUM | Directional (r=+0.38) | Stationary | FV=10000 fixed, ACF lag-1=-0.495 (archived R1/R2) |
+| INTARIAN_PEPPER_ROOT | Contrarian (β=-0.65) | +1000/day linear ramp | Holt's FV, never aggressive, lean long (archived R1/R2) |
+| HYDROGEL_PACK | Unknown — run EDA | Unknown | R3 new product |
+| VELVETFRUIT_EXTRACT | Unknown — run EDA | Unknown | R3 option underlying |
+| VEV_* vouchers | N/A — options | N/A | Call options, TTE=5d at R3 start, use Black-Scholes |
+
+## Options EDA (VEV vouchers only)
+
+For each voucher strike, additionally compute:
+1. Observed mid price of the voucher
+2. Black-Scholes theoretical value: `C = S·N(d1) - K·e^(-rT)·N(d2)` with r=0, T=TTE/365
+3. Implied vol (IV) by inverting BS — use bisection on σ
+4. Compare IV across strikes (vol surface / skew)
+5. Compare IV to realized vol of VELVETFRUIT_EXTRACT
+6. Flag strikes where |market price - BS theoretical| > spread (potential mispricing)
 
 ## External References
 - 2nd place P3: https://github.com/TimoDiehm/imc-prosperity-3
