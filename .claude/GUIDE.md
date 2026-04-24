@@ -14,13 +14,14 @@ imc-prosperity-4/imc-prosperity-4/           ← repo root (all commands run fro
 │   └── datamodel.py                          ← Local copy of IMC types for testing
 │
 ├── phase1/
-│   ├── round1/algo/data/                     ← Round 1 CSVs (days -2, -1, 0) ✅
-│   ├── round1/algo/analysis/                 ← Round 1 EDA scripts + eda_output/
-│   ├── round1/algo/strategy/                 ← Round 1 historical trader variants
-│   │
-│   ├── round2/algo/data/                     ← Round 2 CSVs (days -1, 0, 1) ← CURRENT DATA
-│   ├── round2/algo/analysis/                 ← Round 2 EDA (add scripts here)
-│   └── round2/algo/strategy/                 ← Round 2 trader variants (add here)
+│   ├── round1/algo/data/                     ← Round 1 CSVs (ASH + IPR, archived)
+│   ├── round1/algo/analysis/                 ← Round 1 EDA (archived)
+│   ├── round2/algo/data/                     ← Round 2 CSVs (ASH + IPR, archived)
+│   └── round2/algo/analysis/                 ← Round 2 EDA (archived)
+│
+├── phase2/
+│   ├── round3/algo/data/                     ← Round 3 CSVs (HYDROGEL_PACK, VEV, vouchers) ← CURRENT
+│   └── round3/algo/analysis/                 ← Round 3 EDA (add scripts here)
 │
 ├── backtests/                                ← Historical .log files (timestamped)
 └── .claude/                                  ← Agent configs, rules, skills
@@ -56,15 +57,14 @@ You
 
 ---
 
-## Current Workflow (Round 2)
+## Current Workflow (Round 3)
 
-### 1. Research Round 2 data
+### 1. Research Round 3 data
 ```
-@researcher analyze ASH_COATED_OSMIUM and INTARIAN_PEPPER_ROOT
-from phase1/round2/algo/data/ — check if signals changed vs Round 1
+@researcher analyze HYDROGEL_PACK, VELVETFRUIT_EXTRACT, and VEV vouchers
+from phase2/round3/algo/data/ — establish FV process for spot, fit Black-Scholes IV for vouchers
 ```
-Data: `phase1/round2/algo/data/prices_round_2_day_<D>.csv` and `trades_round_2_day_<D>.csv`
-Days available: -1, 0, 1
+Data: `phase2/round3/algo/data/prices_round_3_day_<D>.csv` and `trades_round_3_day_<D>.csv`
 
 ### 2. Strategy decision
 ```
@@ -105,14 +105,15 @@ Each agent loads only what it needs:
 
 ---
 
-## Round 2 Product Summary
+## Round 3 Product Summary
 
-| Product | FV | Limit | Key Signals | Strategy |
-|---|---|---|---|---|
-| ASH_COATED_OSMIUM | 10,000 (fixed) | 80 | ACF=-0.495, OBI directional r=+0.38 | Fixed FV MM + imbalance tilt |
-| INTARIAN_PEPPER_ROOT | Holt's (α=0.20, β=0.10) | 80 | +1000/day ramp, OBI contrarian β=-0.65, Z-momentum r=+0.46 | Passive MM only — no aggressive takes |
+| Product | Type | Limit | Strategy |
+|---|---|---|---|
+| HYDROGEL_PACK | Delta-1 spot | 200 | TBD — run EDA first |
+| VELVETFRUIT_EXTRACT | Delta-1 spot (option underlying) | 200 | TBD — run EDA; track vol for BS pricing |
+| VEV_4000…VEV_6500 | Call options (10 strikes) | 300 each | Black-Scholes IV fit; TTE=5d at R3 start |
 
-MAF: `bid()` in `class Trader` — top 50% of bidders get 25% extra quotes. Bid subtracted from R2 profits if accepted.
+Manual: Celestial Gardeners' Guild — two-bid auction. Bio-Pods auto-sell at 920. Optimal b1 ≈ 675, b2 TBD based on avg competitor bid estimate.
 
 ---
 

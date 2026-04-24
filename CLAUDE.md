@@ -8,9 +8,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Competition Context
 - **Competition**: IMC Prosperity 4, 16 days, 5 rounds — currency: XIRECs
 - **Goal**: Max PnL, top global rank
-- **Round 2 started**: April 18, 2026
-- **Current phase**: Round 2 — "Growing Your Outpost" (planet: Intara)
-- **Round objective**: 200,000 XIRECs net profit total (Rounds 1+2 combined) — qualifier threshold for Phase 2
+- **Round 3 started**: April 24, 2026
+- **Current phase**: Round 3 — "Gloves Off" (planet: Solvenar) — Phase 2 / GOAT begins
+- **Leaderboard reset**: all teams start Round 3 at 0 PnL — Phase 1 results archived
+- **Round duration**: 48 hours (Rounds 3–5 are shorter than R1/R2)
 
 ## Repo Layout
 
@@ -26,13 +27,15 @@ imc-prosperity-4/imc-prosperity-4/        ← repo root (run all commands from h
 │   └── datamodel.py                       ← Copy of IMC types for local testing
 │
 ├── phase1/
-│   ├── round0/                            ← EMERALDS + TOMATOES (archived, Round 0)
+│   ├── round0/                            ← EMERALDS + TOMATOES (archived)
 │   ├── round1/algo/data/                  ← ASH + IPR Round 1 CSVs (days -2, -1, 0)
-│   ├── round1/algo/analysis/              ← Round 1 EDA scripts and outputs
-│   ├── round2/algo/data/                  ← Round 2 CSVs (days -1, 0, 1) ← CURRENT
-│   └── round2/algo/analysis/              ← Round 2 EDA (add scripts here)
+│   ├── round1/algo/analysis/              ← Round 1 EDA
+│   ├── round2/algo/data/                  ← ASH + IPR Round 2 CSVs (archived)
+│   └── round2/algo/analysis/              ← Round 2 EDA (archived)
 │
-├── phase2/                                ← Rounds 3–5 scaffolding (empty until data drops)
+├── phase2/
+│   ├── round3/algo/data/                  ← Round 3 CSVs (HYDROGEL_PACK, VEV, vouchers) ← CURRENT
+│   └── round3/algo/analysis/              ← Round 3 EDA (add scripts here)
 └── backtests/                             ← Historical .log files
 ```
 
@@ -111,38 +114,38 @@ Use this workflow every round so research, implementation, and validation stay a
   - no overfit thresholds
   - no product included unless we can clearly explain why it should make money
 
-## Current Round: Round 2
+## Current Round: Round 3
 
-**Submission file: `trader.py` at repo root** — `tradertest.py` is no longer in active use
+**Submission file: `trader.py` at repo root**
 
-| Product | Fair Value | Limit | Strategy |
+| Product | Type | Limit | Notes |
 |---|---|---|---|
-| ASH_COATED_OSMIUM | 10,000 (fixed, stationary) | 80 | Fixed FV MM + imbalance tilt → see @.claude/rules/products/ash_coated_osmium.md |
-| INTARIAN_PEPPER_ROOT | Holt's linear smoothing, +1000/day trend | 80 | Dynamic FV MM + trend bias → see @.claude/rules/products/intarian_pepper_root.md |
+| HYDROGEL_PACK | Delta-1 spot | 200 | Standard MM product — run EDA to confirm FV process |
+| VELVETFRUIT_EXTRACT | Delta-1 spot | 200 | Underlying for vouchers — price drives option value |
+| VEV_4000 … VEV_6500 | Call option (×10 strikes) | 300 each | Black-Scholes pricing; TTE=5 days at R3 start |
 
-## Market Access Fee (MAF) — Round 2 Only
-- `bid()` method in `class Trader` sets your MAF bid (XIRECs)
-- Top 50% of bids across all participants gain **25% extra market flow** (more quotes to trade against)
-- Accepted bids are **subtracted from Round 2 profits** — bid only what the extra flow is worth
-- MAF is a one-time, blind auction; median of all bids is the cutoff
-- During backtesting, MAF is ignored — only applied in the final Round 2 simulation
-- Backtest runs with 80% of all generated quotes (slightly randomized per submission)
-- Strategy: bid enough to be top 50%, but not excessively — game-theory optimum is just above median
-- **Default bid**: `return 0` will NOT get extra access; update to a reasoned value before submission
+**Voucher strikes**: 4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500
+**TTE timeline**: TTE=8d (tutorial) → 7d (R1) → 6d (R2) → **5d (R3)** → 4d (R4) → 3d (R5)
 
-## Investment Budget — Round 2 Only
-- 50,000 XIRECs to allocate across **three growth pillars** (details TBD from round data)
-- Allocation is separate from trading algorithm — manual decision, not in trader.py
+## Manual Trading — Celestial Gardeners' Guild (Round 3)
+- Submit **two bids** (b1, b2) against counterparties with reserve prices uniform on {670, 675, …, 920} (increment 5)
+- All acquired Bio-Pods auto-sell at **920** next trading day
+- **Bid 1**: trade at b1 with any counterparty whose reserve ≤ b1
+- **Bid 2**: trade at b2 if reserve ≤ b2 AND b2 ≥ mean of all players' b2 — else penalty factor `((920 - avg_b2) / (920 - b2))^3` applied
+- Optimal b1: **just above 670** (capture all counterparties, minimize cost) → set b1 = 671 or 675
+- Optimal b2: game-theory — bid just above expected avg_b2; without data on other teams, anchor near 800–850
+- Submit via Manual Challenge Overview window; last submission before deadline is locked
 
-## Data Findings Summary (Rounds 1 & 2)
-- **ASH_COATED_OSMIUM**: Near-fixed fair value around 10,000. Strong lag-1 mean-reversion (ACF=-0.495). OBI is **directional** (r≈0.38, follow imbalance direction). Classical stationary MM product.
-- **INTARIAN_PEPPER_ROOT**: Trends +1000/day linearly, consistent across all days (<3σ). Lag-1 ACF=-0.501. Three independent signals: (1) **OBI is CONTRARIAN** (beta=-0.55 to -0.78, p≈0) — high bid volume predicts price DOWN; (2) **Micro-price Z-score is momentum** (corr≈+0.46, p≈0) — use for quote suppression; (3) **Buy trades are informed** (+2.6 ticks fwd_10, t≈12), sell trades are noise. NEVER use market orders (13-tick spread, signal≈1.5 ticks → guaranteed loss). MM earns 11–12× buy-and-hold.
-- **Cross-product**: No robust pairs/arbitrage. Trade independently.
+## Data Findings Summary (Round 3 — update as EDA runs)
+- **HYDROGEL_PACK**: No findings yet — run EDA on `phase2/round3/algo/data/`
+- **VELVETFRUIT_EXTRACT**: No findings yet — run EDA; this is the option underlying
+- **VEV vouchers**: No findings yet — fit Black-Scholes IV; compare implied vs realized vol; check moneyness across strikes
+- **Cross-product**: VEV vouchers are linked to VELVETFRUIT_EXTRACT by option pricing — delta-hedge or exploit IV mispricing
 
 ## Key Rules & References
 - See @.claude/rules/submission.md — hard constraints, never break
 - See @.claude/rules/round-roadmap.md — future rounds planning
-- See @.claude/rules/products/ — per-product strategy details
+- See @.claude/rules/products/ — per-product strategy details (R3: hydrogel_pack.md, velvetfruit_extract.md, velvetfruit_extract_voucher.md)
 - See @.claude/rules/agents-gather-protocol.md — trigger phrase `agents gather <idea>` launches every agent in `.claude/agents/` in parallel and appends the reasoning record to `shared_reasoning.md` (auto-scales; new agents join automatically)
 - See @.claude/rules/quant-council-guide.md — full explanation of the agents gather protocol, roster, phases, and challenger review
 - See `misc/ALGO_STRUCTURE.md` — exchange mechanics, TradingState API, position limit rules
@@ -176,4 +179,5 @@ Use this workflow every round so research, implementation, and validation stay a
 - Verbose print() in submitted code
 - Hardcode historical prices without runtime fallback
 - Modify datamodel.py
-- Submit with `bid()` returning 0 — set a reasoned MAF value before final submission
+- Use market orders on wide-spread products (same rule as IPR — crossing spread destroys edge)
+- Use Black-Scholes without confirming underlying volatility from actual R3 data

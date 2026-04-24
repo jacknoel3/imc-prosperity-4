@@ -4,17 +4,19 @@
 |-------|----------|-------|--------|
 | 0 ✅ | EMERALDS, TOMATOES | Pure MM — learn env | Done |
 | 1 ✅ | ASH_COATED_OSMIUM, INTARIAN_PEPPER_ROOT | Fixed FV MM (ASH) + Holt's trend MM (IPR) + imbalance tilt | Done |
-| 2 🔴 | ASH_COATED_OSMIUM, INTARIAN_PEPPER_ROOT | Same as R1 + MAF bid + 25% extra market flow + 50k investment budget allocation | **Current** |
-| 3 | Options (vouchers) | Black-Scholes IV, dynamic hedge — unhedged long vega won P3 | |
+| 2 ✅ | ASH_COATED_OSMIUM, INTARIAN_PEPPER_ROOT | Same as R1 + MAF bid + 25% extra market flow + 50k investment budget | Done |
+| 3 🔴 | HYDROGEL_PACK, VELVETFRUIT_EXTRACT, VEV_4000…VEV_6500 | Black-Scholes IV, delta hedge or vol arb on vouchers + MM on spot | **Current** |
 | 4 | Cross-exchange arb | Two-way arb + accumulation — read fee structure twice | |
 | 5 | Insider IDs revealed | Copy insider trades, rank by forward PnL — keep MM running | |
 
-## Round 2 Key Changes vs Round 1
-- Same products and position limits (ASH=80, IPR=80)
-- Add `bid()` method with MAF value — top 50% of bidders get 25% more quotes to trade against
-- MAF bid is subtracted from Round 2 profits if accepted (blind auction, cutoff = median bid)
-- Backtest uses 80% of quotes (slightly randomized per submission) — MAF ignored during testing
-- 50,000 XIRECs investment budget to allocate across three growth pillars (manual, not in trader.py)
+## Round 3 Key Changes vs Round 2
+- New planet (Solvenar), leaderboard reset — Phase 2 / GOAT begins
+- Round duration: 48 hours (down from 72)
+- New products: HYDROGEL_PACK (limit 200), VELVETFRUIT_EXTRACT (limit 200), 10 VEV voucher strikes (limit 300 each)
+- Vouchers are call options on VEV with TTE=5 days at R3 start; TTE counts down 1 day per round
+- Manual: Celestial Gardeners' Guild — two-bid auction, Bio-Pods sell at 920, uniform reserve 670–920 step 5
+- No MAF mechanic in R3+
+- `bid()` method safe to include but silently ignored outside Round 2
 
 ## What Kills Teams
 - Hardcoding historical prices without fallback
