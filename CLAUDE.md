@@ -42,6 +42,75 @@ imc-prosperity-4/imc-prosperity-4/        ← repo root (run all commands from h
 | Backtest | `prosperity3bt trader.py 2` (run from repo root) |
 | Visualize | https://jmerle.github.io/imc-prosperity-3-visualizer/ |
 
+## Algo Workflow
+
+Use this workflow every round so research, implementation, and validation stay aligned across the team.
+
+### 1. Update Shared Context First
+- Use the IMC wiki and platform information to refresh this file at the start of each round.
+- Keep the existing structure intact when updating round context, products, mechanics, limits, and workflow assumptions.
+- Confirm exchange mechanics before strategy work:
+  - matching and fill behavior
+  - cancellation behavior
+  - position-limit rejection behavior
+  - conversion accounting
+  - PnL marking methodology
+
+### 2. Run EDA and Build Product Hypotheses
+- Create a hypothesis sheet for each product covering:
+  - fair value process
+  - book shape
+  - spread behavior
+  - trade arrival
+  - bot patterns
+  - whether the edge is maker-driven or taker-driven
+- For each product, answer:
+  - Is fair value fixed, drifting, mean reverting, regime switching, basket-linked, option-linked, or flow-linked?
+  - Are bots only interacting at top-of-book?
+  - Where do trades print relative to mid and estimated fair value?
+  - Are there stable counterparty or trader-ID patterns?
+  - Should we be makers, takers, or hybrid?
+  - Are products correlated enough for stat-arb or relative-value trades?
+
+### 3. Start From a Baseline by Product Archetype
+- Round 1 style: fair-value market making
+- Round 2 style: basket versus synthetic spread trading
+- Round 3 style: option mispricing or IV relative value
+- Round 4 style: conversion-cost arbitrage or regime switching
+- Round 5 style: trader-ID signal copying layered on top of the existing stack
+- First implementation goal: one clean, explainable baseline per product archetype.
+
+### 4. Backtest and Visualize Immediately
+- Use the backtester fork as soon as a baseline exists.
+- Overlay fills on the dashboard instead of trusting only aggregate PnL.
+- Diagnose execution quality and inventory path, not just final profit.
+
+### 5. Diagnose Fills, Not Just Alpha
+- For every early strategy, explicitly answer:
+  - Are we making money from true edge or just favorable drift?
+  - Are we over-quoting and getting picked off?
+  - Are fills concentrated in bad regimes?
+  - Are we leaking PnL when inventory gets stuck?
+  - Is one product carrying or killing the round?
+
+### 6. Harden Before Optimizing
+- Add robustness before adding complex logic:
+  - position caps
+  - side-capacity checks
+  - fair-value fallback logic
+  - product toggles
+  - low-log submission mode
+  - graceful handling for missing observations or changed products
+
+### 7. Submission Standard
+- The first submission should be boring and robust.
+- Prefer:
+  - one clean baseline per product archetype
+  - no heavy logging
+  - no fragile hardcoding
+  - no overfit thresholds
+  - no product included unless we can clearly explain why it should make money
+
 ## Current Round: Round 2
 
 **Submission file: `trader.py` at repo root** — `tradertest.py` is no longer in active use
@@ -74,6 +143,8 @@ imc-prosperity-4/imc-prosperity-4/        ← repo root (run all commands from h
 - See @.claude/rules/submission.md — hard constraints, never break
 - See @.claude/rules/round-roadmap.md — future rounds planning
 - See @.claude/rules/products/ — per-product strategy details
+- See @.claude/rules/agents-gather-protocol.md — trigger phrase `agents gather <idea>` launches every agent in `.claude/agents/` in parallel and appends the reasoning record to `shared_reasoning.md` (auto-scales; new agents join automatically)
+- See @.claude/rules/quant-council-guide.md — full explanation of the agents gather protocol, roster, phases, and challenger review
 - See `misc/ALGO_STRUCTURE.md` — exchange mechanics, TradingState API, position limit rules
 - See `misc/trader_structure.py` — minimal Trader class template (starting point for new files)
 
@@ -84,6 +155,11 @@ imc-prosperity-4/imc-prosperity-4/        ← repo root (run all commands from h
 | researcher | Analyzing CSVs, external writeups, data questions |
 | reviewer | Pre-submission checks, bug hunting |
 | coder | Implementing strategies, running backtests |
+| quant-alpha/beta/gamma/delta/epsilon | Core debaters — participate in `agents gather` automatically |
+| quant-devils-advocate | Challenger — auto-runs at the end of every `agents gather`; invoke directly when a recommendation feels too rosy |
+| quant-optimist | Challenger — auto-runs at the end of every `agents gather`; invoke directly when a recommendation feels too cautious |
+
+**Trigger phrase**: `agents gather <your idea>` → main Claude launches every `.claude/agents/*.md` in parallel, appends reasoning to `shared_reasoning.md`, returns a balanced view. Auto-scales: new agent files auto-join. See @.claude/rules/agents-gather-protocol.md.
 
 ## Skills
 - `/backtest` — run backtest and interpret per-product PnL
