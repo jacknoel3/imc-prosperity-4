@@ -162,6 +162,9 @@ export interface MonteCarloRunSummary {
   sessionId: number;
   day: number;
   totalPnl: number;
+  productPnl?: Record<string, number>;
+  productSlopePerStep?: Record<string, number>;
+  productR2?: Record<string, number>;
   ashPnl: number;
   pepperPnl: number;
   totalSlopePerStep: number;
@@ -184,6 +187,9 @@ export interface MonteCarloBandSeries {
 export interface MonteCarloSessionSummary {
   sessionId: number;
   totalPnl: number;
+  productPnl?: Record<string, number>;
+  productPosition?: Record<string, number>;
+  productCash?: Record<string, number>;
   ashPnl: number;
   pepperPnl: number;
   ashPosition: number;
@@ -254,6 +260,7 @@ export interface MonteCarloDashboard {
     ashPnl: MonteCarloDistributionStats;
     pepperPnl: MonteCarloDistributionStats;
     ashPepperCorrelation: number;
+    productPnl?: Record<string, MonteCarloDistributionStats>;
   };
   trendFits: Record<string, MonteCarloTrendFitGroup>;
   aggregateTrendFits?: Record<string, MonteCarloTrendFitGroup>;
@@ -261,6 +268,7 @@ export interface MonteCarloDashboard {
     totalPnl: MonteCarloNormalFit;
     ashPnl: MonteCarloNormalFit;
     pepperPnl: MonteCarloNormalFit;
+    productPnl?: Record<string, MonteCarloNormalFit>;
   };
   scatterFit: MonteCarloScatterFit;
   generatorModel: Record<string, MonteCarloGeneratorModel>;
@@ -272,7 +280,20 @@ export interface MonteCarloDashboard {
       cash: MonteCarloDistributionStats;
     }
   >;
-  histograms: Record<string, MonteCarloHistogram>;
+  histograms: {
+    totalPnl: MonteCarloHistogram;
+    ashPnl: MonteCarloHistogram;
+    pepperPnl: MonteCarloHistogram;
+    totalProfitability: MonteCarloHistogram;
+    totalStability: MonteCarloHistogram;
+    ashProfitability?: MonteCarloHistogram;
+    ashStability?: MonteCarloHistogram;
+    pepperProfitability?: MonteCarloHistogram;
+    pepperStability?: MonteCarloHistogram;
+    productPnl?: Record<string, MonteCarloHistogram>;
+    productProfitability?: Record<string, MonteCarloHistogram>;
+    productStability?: Record<string, MonteCarloHistogram>;
+  };
   sessions: MonteCarloSessionSummary[];
   runs?: MonteCarloRunSummary[];
   topSessions: MonteCarloSessionSummary[];

@@ -52,10 +52,17 @@ Replay the tutorial CSVs directly:
 prosperity3bt ../example_trader.py 0 --data ../data
 ```
 
+Replay the current Round 3 CSVs directly:
+
+```bash
+prosperity3bt ../example_trader.py 3 --data ../data
+```
+
 The bundled frontend in this repo is Monte Carlo-only, so `prosperity3bt --vis` is not supported by the shipped UI.
 
 ## Notes
 
 - `prosperity4mcbt` works with normal Prosperity-style `Trader.run(state)` files.
 - No special visualizer logger is required for Monte Carlo mode.
-- Tutorial-round Monte Carlo currently provides empty observations and does not simulate conversions.
+- Round 3 Monte Carlo uses a Python block-bootstrap simulator calibrated from the Round 3 CSVs. It preserves synchronized cross-product book states and replays observed trade arrivals from sampled source ticks.
+- The older Rust simulator remains available for the two Round 1 products when no Round 3 data root is found.

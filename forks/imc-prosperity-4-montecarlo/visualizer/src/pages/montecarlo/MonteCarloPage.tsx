@@ -236,6 +236,14 @@ export function MonteCarloPage(): ReactNode {
   const totalTrend = dashboard.trendFits.TOTAL;
   const ashTrend = dashboard.trendFits[productA];
   const pepperTrend = dashboard.trendFits[productB];
+  const productNormalFits = dashboard.normalFits.productPnl ?? {
+    [productA]: dashboard.normalFits.ashPnl,
+    [productB]: dashboard.normalFits.pepperPnl,
+  };
+  const productHistograms = dashboard.histograms.productPnl ?? {
+    [productA]: dashboard.histograms.ashPnl,
+    [productB]: dashboard.histograms.pepperPnl,
+  };
   const scatterFit = dashboard.scatterFit;
   const selectedBandSeries = dashboard.bandSeries?.[bandProduct];
   const bandOptions = Object.keys(dashboard.bandSeries ?? {}).map(product => ({ value: product, label: product }));
@@ -245,12 +253,12 @@ export function MonteCarloPage(): ReactNode {
     normalFitSeries(dashboard.normalFits.totalPnl),
   ];
   const ashHistogramSeries: Highcharts.SeriesOptionsType[] = [
-    histogramSeries(dashboard.histograms.ashPnl, `${productA} PnL`, '#12b886'),
-    normalFitSeries(dashboard.normalFits.ashPnl),
+    histogramSeries(productHistograms[productA], `${productA} PnL`, '#12b886'),
+    normalFitSeries(productNormalFits[productA]),
   ];
   const pepperHistogramSeries: Highcharts.SeriesOptionsType[] = [
-    histogramSeries(dashboard.histograms.pepperPnl, `${productB} PnL`, '#fd7e14'),
-    normalFitSeries(dashboard.normalFits.pepperPnl),
+    histogramSeries(productHistograms[productB], `${productB} PnL`, '#fd7e14'),
+    normalFitSeries(productNormalFits[productB]),
   ];
   const scatterSeries: Highcharts.SeriesOptionsType[] = [
     {
@@ -269,13 +277,13 @@ export function MonteCarloPage(): ReactNode {
   ];
   const profitabilitySeries: Highcharts.SeriesOptionsType[] = [
     distributionLineSeries(dashboard.histograms.totalProfitability, 'Total', '#4c6ef5'),
-    distributionLineSeries(dashboard.histograms.ashProfitability, productA, '#12b886'),
-    distributionLineSeries(dashboard.histograms.pepperProfitability, productB, '#fd7e14'),
+    distributionLineSeries(dashboard.histograms.productProfitability?.[productA] ?? dashboard.histograms.ashProfitability ?? dashboard.histograms.totalProfitability, productA, '#12b886'),
+    distributionLineSeries(dashboard.histograms.productProfitability?.[productB] ?? dashboard.histograms.pepperProfitability ?? dashboard.histograms.totalProfitability, productB, '#fd7e14'),
   ];
   const stabilitySeries: Highcharts.SeriesOptionsType[] = [
     distributionLineSeries(dashboard.histograms.totalStability, 'Total', '#4c6ef5'),
-    distributionLineSeries(dashboard.histograms.ashStability, productA, '#12b886'),
-    distributionLineSeries(dashboard.histograms.pepperStability, productB, '#fd7e14'),
+    distributionLineSeries(dashboard.histograms.productStability?.[productA] ?? dashboard.histograms.ashStability ?? dashboard.histograms.totalStability, productA, '#12b886'),
+    distributionLineSeries(dashboard.histograms.productStability?.[productB] ?? dashboard.histograms.pepperStability ?? dashboard.histograms.totalStability, productB, '#fd7e14'),
   ];
 
   return (
@@ -411,12 +419,11 @@ export function MonteCarloPage(): ReactNode {
         <Grid.Col span={{ base: 12, md: 4 }}>
           <SummaryTable title="Total PnL Summary" stats={dashboard.overall.totalPnl} />
         </Grid.Col>
-        <Grid.Col span={{ base: 12, md: 4 }}>
-          <SummaryTable title={`${productA} PnL Summary`} stats={dashboard.products[productA].pnl} />
-        </Grid.Col>
-        <Grid.Col span={{ base: 12, md: 4 }}>
-          <SummaryTable title={`${productB} PnL Summary`} stats={dashboard.products[productB].pnl} />
-        </Grid.Col>
+        {dashboard.meta.products.map(product => (
+          <Grid.Col key={`summary-${product}`} span={{ base: 12, md: 4 }}>
+            <SummaryTable title={`${product} PnL Summary`} stats={dashboard.products[product].pnl} />
+          </Grid.Col>
+        ))}
 
         <Grid.Col span={{ base: 12, md: 6 }}>
           <SimpleChart
@@ -443,7 +450,7 @@ export function MonteCarloPage(): ReactNode {
         <Grid.Col span={{ base: 12, md: 6 }}>
           <SimpleChart
             title={`${productA} PnL Distribution`}
-            subtitle={`Normal fit μ ${formatNumber(dashboard.normalFits.ashPnl.mean)} · σ ${formatNumber(dashboard.normalFits.ashPnl.std)} · R² ${formatNumber(dashboard.normalFits.ashPnl.r2, 3)}`}
+            subtitle={`Normal fit μ ${formatNumber(productNormalFits[productA].mean)} · σ ${formatNumber(productNormalFits[productA].std)} · R² ${formatNumber(productNormalFits[productA].r2, 3)}`}
             series={ashHistogramSeries}
             options={{
               xAxis: { title: { text: `${productA} final pnl` } },
@@ -454,7 +461,7 @@ export function MonteCarloPage(): ReactNode {
         <Grid.Col span={{ base: 12, md: 6 }}>
           <SimpleChart
             title={`${productB} PnL Distribution`}
-            subtitle={`Normal fit μ ${formatNumber(dashboard.normalFits.pepperPnl.mean)} · σ ${formatNumber(dashboard.normalFits.pepperPnl.std)} · R² ${formatNumber(dashboard.normalFits.pepperPnl.r2, 3)}`}
+            subtitle={`Normal fit μ ${formatNumber(productNormalFits[productB].mean)} · σ ${formatNumber(productNormalFits[productB].std)} · R² ${formatNumber(productNormalFits[productB].r2, 3)}`}
             series={pepperHistogramSeries}
             options={{
               xAxis: { title: { text: `${productB} final pnl` } },
@@ -501,10 +508,10 @@ export function MonteCarloPage(): ReactNode {
         </Grid.Col>
 
         <Grid.Col span={{ base: 12, md: 6 }}>
-          <SessionRankingTable title="Best Sessions" rows={dashboard.topSessions} productLabels={[productA, productB]} />
+          <SessionRankingTable title="Best Sessions" rows={dashboard.topSessions} productLabels={dashboard.meta.products} />
         </Grid.Col>
         <Grid.Col span={{ base: 12, md: 6 }}>
-          <SessionRankingTable title="Worst Sessions" rows={dashboard.bottomSessions} productLabels={[productA, productB]} />
+          <SessionRankingTable title="Worst Sessions" rows={dashboard.bottomSessions} productLabels={dashboard.meta.products} />
         </Grid.Col>
 
         {selectedBandSeries && (

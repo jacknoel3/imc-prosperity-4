@@ -315,8 +315,9 @@ export function SessionRankingTable({
 }: {
   title: string;
   rows: MonteCarloDashboard['sessions'];
-  productLabels: [string, string];
+  productLabels: string[];
 }): ReactNode {
+  const shownProducts = productLabels.slice(0, 4);
   return (
     <VisualizerCard title={title}>
       <Table striped withTableBorder withColumnBorders stickyHeader stickyHeaderOffset={0}>
@@ -324,8 +325,9 @@ export function SessionRankingTable({
           <Table.Tr>
             <Table.Th>Session</Table.Th>
             <Table.Th>Total</Table.Th>
-            <Table.Th>{productLabels[0]}</Table.Th>
-            <Table.Th>{productLabels[1]}</Table.Th>
+            {shownProducts.map(product => (
+              <Table.Th key={`${title}-${product}`}>{product}</Table.Th>
+            ))}
             <Table.Th>Total $/step</Table.Th>
             <Table.Th>Total R²</Table.Th>
           </Table.Tr>
@@ -335,8 +337,11 @@ export function SessionRankingTable({
             <Table.Tr key={`${title}-${row.sessionId}`}>
               <Table.Td>{row.sessionId}</Table.Td>
               <Table.Td>{formatNumber(row.totalPnl, 2)}</Table.Td>
-              <Table.Td>{formatNumber(row.ashPnl, 2)}</Table.Td>
-              <Table.Td>{formatNumber(row.pepperPnl, 2)}</Table.Td>
+              {shownProducts.map(product => (
+                <Table.Td key={`${title}-${row.sessionId}-${product}`}>
+                  {formatNumber(row.productPnl?.[product] ?? (product === productLabels[0] ? row.ashPnl : row.pepperPnl), 2)}
+                </Table.Td>
+              ))}
               <Table.Td>{formatNumber(row.runMeanTotalSlopePerStep ?? row.totalSlopePerStep, 4)}</Table.Td>
               <Table.Td>{formatNumber(row.runMeanTotalR2 ?? row.totalR2, 3)}</Table.Td>
             </Table.Tr>
