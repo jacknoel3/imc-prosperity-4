@@ -1,7 +1,7 @@
 ## HYDROGEL_PACK
 - Type: Delta-1 spot
 - Position limit: 200
-- Data: `phase2/round3/algo/data/`
+- Data: `phase2/round3/data/`
 
 ### Known
 - No EDA yet — populate after running analysis on Round 3 CSVs

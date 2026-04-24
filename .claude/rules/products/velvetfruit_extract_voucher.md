@@ -3,7 +3,7 @@
 - Position limit: 300 per voucher
 - Strikes: 4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500
 - **TTE at R3 start: 5 days** (counts down 1 day per round — expires after R7 equivalent)
-- Data: `phase2/round3/algo/data/`
+- Data: `phase2/round3/data/`
 
 ### TTE by round
 | Round | TTE |

@@ -1,7 +1,7 @@
 ## VELVETFRUIT_EXTRACT
 - Type: Delta-1 spot — also the **underlying** for all VEV vouchers
 - Position limit: 200
-- Data: `phase2/round3/algo/data/`
+- Data: `phase2/round3/data/`
 
 ### Known
 - Vouchers (VEV_4000…VEV_6500) are call options on this product

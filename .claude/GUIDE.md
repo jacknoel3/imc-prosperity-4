@@ -20,8 +20,10 @@ imc-prosperity-4/imc-prosperity-4/           ← repo root (all commands run fro
 │   └── round2/algo/analysis/                 ← Round 2 EDA (archived)
 │
 ├── phase2/
-│   ├── round3/algo/data/                     ← Round 3 CSVs (HYDROGEL_PACK, VEV, vouchers) ← CURRENT
-│   └── round3/algo/analysis/                 ← Round 3 EDA (add scripts here)
+│   └── round3/
+│       ├── data/                             ← Round 3 CSVs (prices + trades combined) ← CURRENT
+│       ├── algo/analysis/                    ← Round 3 EDA (add scripts here)
+│       └── manual/                           ← Manual trading notes
 │
 ├── backtests/                                ← Historical .log files (timestamped)
 └── .claude/                                  ← Agent configs, rules, skills
@@ -62,9 +64,9 @@ You
 ### 1. Research Round 3 data
 ```
 @researcher analyze HYDROGEL_PACK, VELVETFRUIT_EXTRACT, and VEV vouchers
-from phase2/round3/algo/data/ — establish FV process for spot, fit Black-Scholes IV for vouchers
+from phase2/round3/data/ — establish FV process for spot, fit Black-Scholes IV for vouchers
 ```
-Data: `phase2/round3/algo/data/prices_round_3_day_<D>.csv` and `trades_round_3_day_<D>.csv`
+Data: `phase2/round3/data/prices_round_3_combined.csv` and `trades_round_3_combined.csv`
 
 ### 2. Strategy decision
 ```

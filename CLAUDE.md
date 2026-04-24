@@ -34,8 +34,10 @@ imc-prosperity-4/imc-prosperity-4/        ← repo root (run all commands from h
 │   └── round2/algo/analysis/              ← Round 2 EDA (archived)
 │
 ├── phase2/
-│   ├── round3/algo/data/                  ← Round 3 CSVs (HYDROGEL_PACK, VEV, vouchers) ← CURRENT
-│   └── round3/algo/analysis/              ← Round 3 EDA (add scripts here)
+│   └── round3/
+│       ├── data/                          ← Round 3 CSVs (prices + trades combined) ← CURRENT
+│       ├── algo/analysis/                 ← Round 3 EDA (add scripts here)
+│       └── manual/                        ← Manual trading notes
 └── backtests/                             ← Historical .log files
 ```
 
@@ -137,7 +139,7 @@ Use this workflow every round so research, implementation, and validation stay a
 - Submit via Manual Challenge Overview window; last submission before deadline is locked
 
 ## Data Findings Summary (Round 3 — update as EDA runs)
-- **HYDROGEL_PACK**: No findings yet — run EDA on `phase2/round3/algo/data/`
+- **HYDROGEL_PACK**: No findings yet — run EDA on `phase2/round3/data/`
 - **VELVETFRUIT_EXTRACT**: No findings yet — run EDA; this is the option underlying
 - **VEV vouchers**: No findings yet — fit Black-Scholes IV; compare implied vs realized vol; check moneyness across strikes
 - **Cross-product**: VEV vouchers are linked to VELVETFRUIT_EXTRACT by option pricing — delta-hedge or exploit IV mispricing
