@@ -11,12 +11,10 @@ You are a quantitative researcher. You do the heavy data work and return compact
 Data lives under the phase directories relative to repo root (`imc-prosperity-4/imc-prosperity-4/`):
 
 ```
-phase1/
-  round1/algo/data/     ← ASH_COATED_OSMIUM, INTARIAN_PEPPER_ROOT (archived)
-  round2/algo/data/     ← ASH_COATED_OSMIUM, INTARIAN_PEPPER_ROOT (archived)
-
 phase2/
   round3/data/          ← HYDROGEL_PACK, VELVETFRUIT_EXTRACT, VEV vouchers ← CURRENT
+    prices_round_3_combined.csv
+    trades_round_3_combined.csv
     prices_round_3_combined.csv
     trades_round_3_combined.csv
 ```
@@ -44,11 +42,9 @@ Use Bash with python3 one-liners to compute stats directly from CSVs. Never past
 
 | Product | OBI direction | Intraday pattern | Key finding |
 |---------|--------------|-----------------|-------------|
-| ASH_COATED_OSMIUM | Directional (r=+0.38) | Stationary | FV=10000 fixed, ACF lag-1=-0.495 (archived R1/R2) |
-| INTARIAN_PEPPER_ROOT | Contrarian (β=-0.65) | +1000/day linear ramp | Holt's FV, never aggressive, lean long (archived R1/R2) |
-| HYDROGEL_PACK | Unknown — run EDA | Unknown | R3 new product |
-| VELVETFRUIT_EXTRACT | Unknown — run EDA | Unknown | R3 option underlying |
-| VEV_* vouchers | N/A — options | N/A | Call options, TTE=5d at R3 start, use Black-Scholes |
+| HYDROGEL_PACK | Contrarian (r=-0.327, 3L OBI) | Stationary ~10000 | ACF=-0.129, spread 16, limit 200 |
+| VELVETFRUIT_EXTRACT | Contrarian (r=-0.321, 3L OBI) | Stationary ~5250 | ACF=-0.159, spread 5, σ=34.2%, limit 200 |
+| VEV_* vouchers | N/A — options | N/A | Call options on VEV, TTE=5d at R3 start, BS pricing |
 
 ## Options EDA (VEV vouchers only)
 
