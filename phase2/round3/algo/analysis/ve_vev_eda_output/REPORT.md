@@ -52,6 +52,9 @@ Anomaly highlights:
 Regime classification: **trending**. ADF/KPSS/Hurst/variance-ratio diagnostics are in `tables/velvetfruit_stationarity.json`.
 
 
+Note: the blank starts in rolling spread/RV charts are intentional 500-tick rolling-window warmup inside each historical day, not missing data.
+
+
 | day | horizon_ticks | mean | std | skew | kurtosis | jarque_bera_stat | jarque_bera_pvalue |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 0 | 1 | -1.144e-07 | 0.0002136 | -0.03972 | 0.4517 | 87.65 | 9.257e-20 |
@@ -97,26 +100,26 @@ Flow toxicity summary:
 
 | voucher | strike | day | mean_spread | median_spread | p95_spread | mean_mid | spread_pct_mid | trades_per_1000_timestamps | mean_top_depth | fraction_timestamps_with_no_trades |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| VEV_4000 | 4000 | 0 | 20.77 | 21 | 22 | 1247 | 0.01666 | 0.172 | 10.91 | 0.9828 |
+| VEV_4000 | 4000 | 0 | 20.77 | 21 | 22 | 1247 | 0.01666 | 17.2 | 10.91 | 0.9828 |
 | VEV_4500 | 4500 | 0 | 15.78 | 16 | 17 | 746.5 | 0.02114 | 0 | 8.923 | 1 |
 | VEV_5000 | 5000 | 0 | 6.002 | 6 | 7 | 253.3 | 0.0237 | 0 | 15.38 | 1 |
 | VEV_5100 | 5100 | 0 | 4.32 | 4 | 5 | 168.1 | 0.0257 | 0 | 19.18 | 1 |
-| VEV_5200 | 5200 | 0 | 2.926 | 3 | 3 | 97.47 | 0.03002 | 0.003 | 22.46 | 0.9997 |
-| VEV_5300 | 5300 | 0 | 2.161 | 2 | 3 | 48.89 | 0.04419 | 0.037 | 20.15 | 0.9963 |
-| VEV_5400 | 5400 | 0 | 1.43 | 1 | 2 | 18.47 | 0.07742 | 0.064 | 21.65 | 0.9936 |
-| VEV_5500 | 5500 | 0 | 1.181 | 1 | 2 | 8.059 | 0.1465 | 0.081 | 22.09 | 0.9919 |
-| VEV_6000 | 6000 | 0 | 1 | 1 | 1 | 0.5 | 2 | 0.091 | 22.48 | 0.9909 |
-| VEV_6500 | 6500 | 0 | 1 | 1 | 1 | 0.5 | 2 | 0.091 | 15.45 | 0.9909 |
-| VEV_4000 | 4000 | 1 | 20.77 | 21 | 22 | 1248 | 0.01664 | 0.164 | 10.95 | 0.9836 |
-| VEV_4500 | 4500 | 1 | 15.81 | 16 | 17 | 748.4 | 0.02113 | 0.001 | 8.92 | 0.9999 |
-| VEV_5000 | 5000 | 1 | 6.008 | 6 | 7 | 253.3 | 0.02372 | 0.001 | 15.46 | 0.9999 |
-| VEV_5100 | 5100 | 1 | 4.257 | 4 | 5 | 165 | 0.0258 | 0.001 | 19.32 | 0.9999 |
-| VEV_5200 | 5200 | 1 | 2.878 | 3 | 3 | 95.13 | 0.03025 | 0.007 | 22.48 | 0.9993 |
-| VEV_5300 | 5300 | 1 | 2.109 | 2 | 3 | 46.91 | 0.04495 | 0.039 | 20.23 | 0.9961 |
-| VEV_5400 | 5400 | 1 | 1.386 | 1 | 2 | 15.65 | 0.08856 | 0.081 | 21.71 | 0.9919 |
-| VEV_5500 | 5500 | 1 | 1.153 | 1 | 2 | 6.571 | 0.1754 | 0.092 | 22.15 | 0.9908 |
-| VEV_6000 | 6000 | 1 | 1 | 1 | 1 | 0.5 | 2 | 0.098 | 22.44 | 0.9902 |
-| VEV_6500 | 6500 | 1 | 1 | 1 | 1 | 0.5 | 2 | 0.098 | 15.48 | 0.9902 |
+| VEV_5200 | 5200 | 0 | 2.926 | 3 | 3 | 97.47 | 0.03002 | 0.3 | 22.46 | 0.9997 |
+| VEV_5300 | 5300 | 0 | 2.161 | 2 | 3 | 48.89 | 0.04419 | 3.7 | 20.15 | 0.9963 |
+| VEV_5400 | 5400 | 0 | 1.43 | 1 | 2 | 18.47 | 0.07742 | 6.4 | 21.65 | 0.9936 |
+| VEV_5500 | 5500 | 0 | 1.181 | 1 | 2 | 8.059 | 0.1465 | 8.1 | 22.09 | 0.9919 |
+| VEV_6000 | 6000 | 0 | 1 | 1 | 1 | 0.5 | 2 | 9.1 | 22.48 | 0.9909 |
+| VEV_6500 | 6500 | 0 | 1 | 1 | 1 | 0.5 | 2 | 9.1 | 15.45 | 0.9909 |
+| VEV_4000 | 4000 | 1 | 20.77 | 21 | 22 | 1248 | 0.01664 | 16.4 | 10.95 | 0.9836 |
+| VEV_4500 | 4500 | 1 | 15.81 | 16 | 17 | 748.4 | 0.02113 | 0.1 | 8.92 | 0.9999 |
+| VEV_5000 | 5000 | 1 | 6.008 | 6 | 7 | 253.3 | 0.02372 | 0.1 | 15.46 | 0.9999 |
+| VEV_5100 | 5100 | 1 | 4.257 | 4 | 5 | 165 | 0.0258 | 0.1 | 19.32 | 0.9999 |
+| VEV_5200 | 5200 | 1 | 2.878 | 3 | 3 | 95.13 | 0.03025 | 0.7 | 22.48 | 0.9993 |
+| VEV_5300 | 5300 | 1 | 2.109 | 2 | 3 | 46.91 | 0.04495 | 3.9 | 20.23 | 0.9961 |
+| VEV_5400 | 5400 | 1 | 1.386 | 1 | 2 | 15.65 | 0.08856 | 8.1 | 21.71 | 0.9919 |
+| VEV_5500 | 5500 | 1 | 1.153 | 1 | 2 | 6.571 | 0.1754 | 9.2 | 22.15 | 0.9908 |
+| VEV_6000 | 6000 | 1 | 1 | 1 | 1 | 0.5 | 2 | 9.8 | 22.44 | 0.9902 |
+| VEV_6500 | 6500 | 1 | 1 | 1 | 1 | 0.5 | 2 | 9.8 | 15.48 | 0.9902 |
 
 
 **Strategy implication:** Prefer vouchers with both non-trivial trade count and manageable spread-to-mid. Deep OTM floor-price vouchers can look cheap to sell but their 1-tick spread is enormous relative to value; dead strikes should be quoted passively or skipped.
@@ -130,6 +133,9 @@ Flow toxicity summary:
 
 ![IV all](charts/voucher_iv_timeseries_all.png)
 
+Note: IV/RV charts are segmented by historical day because day boundaries reset TTE and session state. The ATM IV line uses the nearest-strike voucher, so strike switches can create real-looking step changes that are proxy mechanics rather than continuous IV moves. Convexity no-arb checks use strike-spacing-adjusted slopes because the voucher strikes are unevenly spaced.
+
+
 Mean ATM IV minus RV gap across historical days: **-17.77%**.
 
 
@@ -139,9 +145,9 @@ Top no-arbitrage violation groups:
 | --- | --- |
 | VEV_4500 | 8812 |
 | VEV_4000 | 2986 |
-| VEV_5400,VEV_5500,VEV_6000 | 9 |
 | VEV_5000 | 3 |
 | VEV_5100 | 0 |
+| VEV_5200 | 0 |
 
 
 **Strategy implication:** The IV-vs-RV gap is the main option-complex signal. When IV is below RV, favor owning liquid gamma near ATM; when IV is above RV, sell premium only where spread and tail risk are acceptable. No-arb violations should be filtered for persistence and executable spread before trading.
@@ -172,11 +178,11 @@ Top no-arbitrage violation groups:
 
 - IV sits below RV on average by about **17.77%** using the ATM proxy and 500-tick annualized RV.
 
-- Most tradeable vouchers by prints are: VEV_4000, VEV_6000, VEV_6500, VEV_5500. Effectively dead or near-dead vouchers by trade rate are: VEV_5300, VEV_5200, VEV_4500, VEV_5000, VEV_5100.
+- Most tradeable vouchers by prints are: VEV_4000, VEV_6000, VEV_6500, VEV_5500. Effectively dead or near-dead vouchers by trade rate are: VEV_4500, VEV_5000, VEV_5100.
 
 - Lowest spread-to-mid vouchers are: VEV_4000, VEV_4500, VEV_5000, VEV_5100. Highest spread-to-mid vouchers are: VEV_5500, VEV_6000, VEV_6500.
 
-- No-arb issues most often involve: VEV_4500, VEV_4000, VEV_5400,VEV_5500,VEV_6000, VEV_5000, VEV_5100. Treat these as candidates only if they persist longer than one timestamp and beat bid/ask costs.
+- No-arb issues most often involve: VEV_4500, VEV_4000, VEV_5000, VEV_5100, VEV_5200. Treat these as candidates only if they persist longer than one timestamp and beat bid/ask costs.
 
 - Strongest lead-lag/residual candidates are: VEV_5100, VEV_5000, VEV_5200. The lag is exploitable only if peak lag is non-zero and spread-to-mid is small enough.
 
@@ -213,9 +219,9 @@ Trade arrival summary:
 
 | day | trade_count | mean_interarrival_ticks | median_interarrival_ticks | std_interarrival_ticks | trades_per_1000_ticks |
 | --- | --- | --- | --- | --- | --- |
-| 0 | 445 | 2227 | 1600 | 2077 | 0.445 |
-| 1 | 450 | 2195 | 1700 | 2096 | 0.45 |
-| 2 | 477 | 2092 | 1500 | 2071 | 0.477 |
+| 0 | 445 | 2227 | 1600 | 2077 | 44.5 |
+| 1 | 450 | 2195 | 1700 | 2096 | 45 |
+| 2 | 477 | 2092 | 1500 | 2071 | 47.7 |
 
 
 Trade sizes by side:

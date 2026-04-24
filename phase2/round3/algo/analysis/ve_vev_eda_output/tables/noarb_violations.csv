@@ -13,7 +13,6 @@ day,voucher,violation_type,count,avg_magnitude,avg_lifetime_ticks
 0,VEV_5300,upper_bound,0,,0.0
 0,VEV_5400,lower_bound,0,,0.0
 0,VEV_5400,upper_bound,0,,0.0
-0,"VEV_5400,VEV_5500,VEV_6000",convexity,9,0.5,1.0
 0,VEV_5500,lower_bound,0,,0.0
 0,VEV_5500,upper_bound,0,,0.0
 0,VEV_6000,lower_bound,0,,0.0

@@ -156,6 +156,28 @@ def add_global_tick(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def add_day_dividers(ax: plt.Axes) -> None:
+    for day in [1, 2]:
+        ax.axvline(day * 1_000_000, color="black", ls="--", alpha=0.35, lw=0.8)
+
+
+def plot_by_day(ax: plt.Axes, df: pd.DataFrame, y_col: str, label: str | None = None, **kwargs: Any) -> None:
+    line_color = kwargs.get("color")
+    for day, group in df.sort_values(["day", "timestamp"]).groupby("day"):
+        line_kwargs = dict(kwargs)
+        if line_color is not None:
+            line_kwargs["color"] = line_color
+        lines = ax.plot(group["global_tick"], group[y_col], label=label if day == 0 else None, **line_kwargs)
+        if line_color is None and lines:
+            line_color = lines[0].get_color()
+
+
+def trades_per_1000_timestamps(trade_count: int, snapshot_count: int) -> float:
+    if snapshot_count <= 0:
+        return float("nan")
+    return float(trade_count) / (float(snapshot_count) / 1000.0)
+
+
 def log_returns(values: pd.Series, horizon: int = 1) -> pd.Series:
     clean = values.astype(float).replace(0, np.nan)
     return np.log(clean).diff(horizon)
@@ -487,12 +509,13 @@ def section2_vev(prices: pd.DataFrame, trades: pd.DataFrame, out: OutputPaths) -
     spread_rv = vev.merge(merged_rv, on=["day", "timestamp"], how="left")
     spread_rv["rolling_spread"] = spread_rv.groupby("day")["spread"].transform(lambda x: x.rolling(500).mean())
     fig, ax1 = plt.subplots(figsize=(12, 4))
-    ax1.plot(spread_rv["global_tick"], spread_rv["rolling_spread"], label="Rolling spread", color="tab:blue")
+    plot_by_day(ax1, spread_rv, "rolling_spread", label="Rolling spread", color="tab:blue")
     ax1.set_ylabel("Spread")
     ax2 = ax1.twinx()
-    ax2.plot(spread_rv["global_tick"], spread_rv["rv_500"], label="RV 500", color="tab:orange", alpha=0.7)
+    plot_by_day(ax2, spread_rv, "rv_500", label="RV 500", color="tab:orange", alpha=0.7)
     ax2.set_ylabel("Annualized RV")
-    plt.title("Velvetfruit Rolling Spread vs Rolling Realized Vol")
+    add_day_dividers(ax1)
+    plt.title("Velvetfruit Rolling Spread vs Rolling Realized Vol (500-tick warmup per day)")
     save_fig(out.charts / "velvetfruit_spread_vs_rv.png")
 
     depth_cols = ["bid_volume_1", "bid_volume_2", "bid_volume_3", "ask_volume_1", "ask_volume_2", "ask_volume_3"]
@@ -666,7 +689,7 @@ def section2_vev(prices: pd.DataFrame, trades: pd.DataFrame, out: OutputPaths) -
             "mean_interarrival_ticks": float(ia.mean()),
             "median_interarrival_ticks": float(ia.median()),
             "std_interarrival_ticks": float(ia.std()),
-            "trades_per_1000_ticks": len(group) / 1000.0,
+            "trades_per_1000_ticks": trades_per_1000_timestamps(len(group), len(vev[vev["day"] == day])),
         })
     arrival_df = pd.DataFrame(arrival_rows)
     write_table(arrival_df, out.tables / "velvetfruit_trade_arrival.csv")
@@ -843,7 +866,7 @@ def section3_vouchers(prices: pd.DataFrame, trades: pd.DataFrame, vev: pd.DataFr
                     "p95_spread": group["spread"].quantile(0.95),
                     "mean_mid": group["mid_price"].mean(),
                     "spread_pct_mid": group["spread"].mean() / group["mid_price"].mean() if group["mid_price"].mean() else np.nan,
-                    "trades_per_1000_timestamps": len(t) / 1000.0,
+                    "trades_per_1000_timestamps": trades_per_1000_timestamps(len(t), len(group)),
                     "mean_top_depth": group[["bid_volume_1", "ask_volume_1"]].mean(axis=1).mean(),
                     "fraction_timestamps_with_no_trades": 1.0 - group["timestamp"].isin(t["timestamp"]).mean(),
                 }
@@ -909,19 +932,21 @@ def section4_options(prices: pd.DataFrame, vev_ctx: dict[str, Any], out: OutputP
     atm_iv = pd.DataFrame(atm_rows)
     write_table(atm_iv, out.tables / "voucher_atm_iv_timeseries.csv")
 
-    plt.figure(figsize=(12, 4))
-    plt.plot(atm_iv["global_tick"], atm_iv["iv"], lw=0.8)
-    plt.title("ATM IV Term Structure Proxy Across Historical Days")
-    plt.ylabel("ATM IV")
+    fig, ax = plt.subplots(figsize=(12, 4))
+    plot_by_day(ax, atm_iv, "iv", lw=0.8)
+    add_day_dividers(ax)
+    ax.set_title("ATM IV Term Structure Proxy by Historical Day (nearest-strike proxy)")
+    ax.set_ylabel("ATM IV")
     save_fig(out.charts / "voucher_atm_iv_across_days.png")
 
-    plt.figure(figsize=(14, 5))
+    fig, ax = plt.subplots(figsize=(14, 5))
     for product in VOUCHERS:
         p = iv_df[iv_df["voucher"] == product]
-        plt.plot(p["global_tick"], p["iv"], lw=0.7, label=product)
-    plt.title("Per-Voucher IV Over Time")
-    plt.ylabel("IV")
-    plt.legend(ncol=3, fontsize=7)
+        plot_by_day(ax, p, "iv", label=product, lw=0.7)
+    add_day_dividers(ax)
+    ax.set_title("Per-Voucher IV Over Time by Historical Day")
+    ax.set_ylabel("IV")
+    ax.legend(ncol=3, fontsize=7)
     save_fig(out.charts / "voucher_iv_timeseries_all.png")
 
     rv_compare = atm_iv.merge(rv[["day", "timestamp", "rv_500"]], on=["day", "timestamp"], how="left")
@@ -930,12 +955,13 @@ def section4_options(prices: pd.DataFrame, vev_ctx: dict[str, Any], out: OutputP
     gap = rv_compare.groupby("day")["iv_minus_rv"].mean().reset_index(name="mean_iv_minus_rv")
     write_table(gap, out.tables / "voucher_iv_rv_gap.csv")
 
-    plt.figure(figsize=(13, 5))
-    plt.plot(rv_compare["global_tick"], rv_compare["iv"], label="ATM IV", lw=1)
-    plt.plot(rv_compare["global_tick"], rv_compare["rv_500"], label="Velvetfruit RV 500", lw=1, alpha=0.8)
-    plt.title("Critical Chart: ATM IV vs Velvetfruit Rolling Realized Vol")
-    plt.ylabel("Annualized vol")
-    plt.legend()
+    fig, ax = plt.subplots(figsize=(13, 5))
+    plot_by_day(ax, rv_compare, "iv", label="ATM IV", lw=1)
+    plot_by_day(ax, rv_compare, "rv_500", label="Velvetfruit RV 500", lw=1, alpha=0.8)
+    add_day_dividers(ax)
+    ax.set_title("Critical Chart: ATM IV vs Velvetfruit Rolling Realized Vol (500-tick RV warmup)")
+    ax.set_ylabel("Annualized vol")
+    ax.legend()
     save_fig(out.charts / "critical_atm_iv_vs_velvetfruit_rv.png")
 
     noarb_rows = []
@@ -961,10 +987,12 @@ def section4_options(prices: pd.DataFrame, vev_ctx: dict[str, Any], out: OutputP
         for i, mag in enumerate(mono):
             if mag > 0:
                 noarb_rows.append({"day": day, "voucher": f"{vouchers[i]}->{vouchers[i+1]}", "violation_type": "monotonicity", "count": 1, "avg_magnitude": mag, "avg_lifetime_ticks": 1})
-        conv = mids[:-2] - 2 * mids[1:-1] + mids[2:]
-        for i, val in enumerate(conv):
-            if val < 0:
-                noarb_rows.append({"day": day, "voucher": f"{vouchers[i]},{vouchers[i+1]},{vouchers[i+2]}", "violation_type": "convexity", "count": 1, "avg_magnitude": -val, "avg_lifetime_ticks": 1})
+        slope_left = (mids[1:-1] - mids[:-2]) / (strikes[1:-1] - strikes[:-2])
+        slope_right = (mids[2:] - mids[1:-1]) / (strikes[2:] - strikes[1:-1])
+        convexity_mags = slope_left - slope_right
+        for i, mag in enumerate(convexity_mags):
+            if mag > 0:
+                noarb_rows.append({"day": day, "voucher": f"{vouchers[i]},{vouchers[i+1]},{vouchers[i+2]}", "violation_type": "convexity_slope", "count": 1, "avg_magnitude": mag, "avg_lifetime_ticks": 1})
 
     noarb = pd.DataFrame(noarb_rows)
     noarb_summary = noarb.groupby(["day", "voucher", "violation_type"], as_index=False).agg(
@@ -1023,20 +1051,26 @@ def section4_options(prices: pd.DataFrame, vev_ctx: dict[str, Any], out: OutputP
     # --- NEW: EMA bands on ATM IV (±1σ, ±2σ) ---
     atm_sorted = atm_iv.sort_values("global_tick").copy()
     span = 2000
-    atm_sorted["iv_ema"] = atm_sorted["iv"].ewm(span=span, min_periods=100).mean()
-    atm_sorted["iv_ema_std"] = atm_sorted["iv"].ewm(span=span, min_periods=100).std()
+    atm_sorted["iv_ema"] = atm_sorted.groupby("day")["iv"].transform(lambda s: s.ewm(span=span, min_periods=100).mean())
+    atm_sorted["iv_ema_std"] = atm_sorted.groupby("day")["iv"].transform(lambda s: s.ewm(span=span, min_periods=100).std())
     write_table(atm_sorted[["global_tick", "day", "timestamp", "voucher", "strike", "iv", "iv_ema", "iv_ema_std"]], out.tables / "voucher_atm_iv_ema.csv")
-    plt.figure(figsize=(14, 5))
-    plt.plot(atm_sorted["global_tick"], atm_sorted["iv"], lw=0.8, alpha=0.6, label="ATM IV")
-    plt.plot(atm_sorted["global_tick"], atm_sorted["iv_ema"], lw=1.5, label=f"EMA (span={span})")
-    for mult, a in [(1, 0.3), (2, 0.15)]:
-        plt.fill_between(atm_sorted["global_tick"],
-            atm_sorted["iv_ema"] - mult * atm_sorted["iv_ema_std"],
-            atm_sorted["iv_ema"] + mult * atm_sorted["iv_ema_std"],
-            alpha=a, label=f"±{mult}σ band")
-    plt.title("ATM IV with EMA Bands (±1σ, ±2σ)")
-    plt.ylabel("Implied Volatility")
-    plt.legend()
+    fig, ax = plt.subplots(figsize=(14, 5))
+    for day, group in atm_sorted.groupby("day"):
+        g = group.sort_values("timestamp")
+        ax.plot(g["global_tick"], g["iv"], lw=0.8, alpha=0.6, label="ATM IV" if day == 0 else None)
+        ax.plot(g["global_tick"], g["iv_ema"], lw=1.5, label=f"EMA (span={span})" if day == 0 else None)
+        for mult, a in [(1, 0.3), (2, 0.15)]:
+            ax.fill_between(
+                g["global_tick"].to_numpy(),
+                (g["iv_ema"] - mult * g["iv_ema_std"]).to_numpy(),
+                (g["iv_ema"] + mult * g["iv_ema_std"]).to_numpy(),
+                alpha=a,
+                label=f"±{mult}σ band" if day == 0 else None,
+            )
+    add_day_dividers(ax)
+    ax.set_title("ATM IV with Per-Day EMA Bands (±1σ, ±2σ)")
+    ax.set_ylabel("Implied Volatility")
+    ax.legend()
     save_fig(out.charts / "voucher_atm_iv_ema_bands.png")
 
     # --- NEW: IV term structure (IV vs TTE at early/mid/late snapshots) ---
@@ -1538,6 +1572,7 @@ def build_report(
     report.append("![Velvetfruit spread vs RV](charts/velvetfruit_spread_vs_rv.png)\n")
     report.append("![Velvetfruit trade side](charts/velvetfruit_trade_minus_mid_by_side.png)\n")
     report.append(f"Regime classification: **{vev_ctx['regime']}**. ADF/KPSS/Hurst/variance-ratio diagnostics are in `tables/velvetfruit_stationarity.json`.\n\n")
+    report.append("Note: the blank starts in rolling spread/RV charts are intentional 500-tick rolling-window warmup inside each historical day, not missing data.\n\n")
     report.append(clean_markdown_table(return_stats, 8))
     report.append("\n\nSpread summary:\n")
     report.append(clean_markdown_table(spread, 5))
@@ -1558,6 +1593,7 @@ def build_report(
     report.append("![Critical IV vs RV](charts/critical_atm_iv_vs_velvetfruit_rv.png)\n")
     report.append("![IV smile day0](charts/voucher_iv_smile_day0.png)\n")
     report.append("![IV all](charts/voucher_iv_timeseries_all.png)\n")
+    report.append("Note: IV/RV charts are segmented by historical day because day boundaries reset TTE and session state. The ATM IV line uses the nearest-strike voucher, so strike switches can create real-looking step changes that are proxy mechanics rather than continuous IV moves. Convexity no-arb checks use strike-spacing-adjusted slopes because the voucher strikes are unevenly spaced.\n\n")
     report.append(f"Mean ATM IV minus RV gap across historical days: **{iv_gap_mean:.2%}**.\n\n")
     report.append("Top no-arbitrage violation groups:\n")
     report.append(clean_markdown_table(noarb_top.reset_index(name="violation_count"), 8))
