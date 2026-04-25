@@ -142,7 +142,7 @@ Use this workflow every round so research, implementation, and validation stay a
 - **HYDROGEL_PACK**: FV≈10,000 (stationary). Spread mean 15.7. ACF lag-1=-0.129 (mean-reverting). OBI is **CONTRARIAN** (r=-0.327) — fade imbalance, do NOT follow it. ~337 trades/day, avg qty 4. Limit=200.
 - **VELVETFRUIT_EXTRACT**: FV≈5,250 (stationary, creeps +9 ticks/day — negligible). Spread mean 5.0 (tightest of all). ACF=-0.159. OBI **CONTRARIAN** (r=-0.321). Realized vol=**34.2% annualized** (stable across 3 days). Deep book (~38 units). ~457 trades/day, avg qty 6. Limit=200.
 - **VEV_4000/4500** (deep ITM): Delta≈1, price≈VEV−K, zero time value. Skip — no option edge.
-- **VEV_5000–5500** (ATM): Flat IV surface ~33–34%, slightly below realized vol (34.2%). VEV_5400 most mispriced: avg −3.8 ticks below BS, spread 1.4, 225 trades — **best single trade**. Delta hedge: short 0.2 VEV per voucher long.
+- **VEV_5000–5500** (ATM): Market IV **~22%** flat across strikes (NOT ~33–34% — earlier figure was wrong, confused with RV). RV=34.2% is the underlying's realized vol, not what the market prices options at. IV is stable at ~22% across all 3 historical days (TTE=8,7,6). Use **sigma=0.22** in BS for fair value. VEV_5400: spread 1.4, 225 trades, most active ATM strike. No confirmed buy-side misprice — the earlier "−3.8 ticks below BS" was theta decay (TTE=6→5), not an arb signal. Passive MM only. Delta at live TTE=5 ≈ 0.15 per unit (not 0.20).
 - **VEV_6000/6500** (deep OTM): Pinned at mid=0.5 (min tick), BS≈0. **SELL at ask=1** — free carry, P(ITM at expiry)≈0.3%. Sell full limit.
 - **Cross-product**: HGP and VEV structurally similar but uncorrelated — trade independently. Vouchers linked to VEV via BS pricing.
 

@@ -77,6 +77,13 @@ def cli(
         int,
         Option("--sample-sessions", help="Number of sessions to persist with full path/trace data for dashboard charts."),
     ] = 10,
+    ticks_per_day: Annotated[
+        int,
+        Option(
+            "--ticks-per-day",
+            help="Number of 100-timestamp steps per simulated Round 3 day. 10000 gives a full 1,000,000 timestamp day.",
+        ),
+    ] = 10000,
     version: Annotated[
         bool,
         Option("--version", "-v", help="Show the program's version number and exit.", is_eager=True, callback=version_callback),
@@ -109,6 +116,7 @@ def cli(
         seed=seed,
         python_bin=python_bin,
         sample_sessions=sample_sessions,
+        ticks_per_day=ticks_per_day,
     )
 
     total_stats = dashboard["overall"]["totalPnl"]

@@ -46,63 +46,51 @@ class OrderManager:
 
 class Trader:
     VELVET = "VELVETFRUIT_EXTRACT"
-    GAMMA_VOUCHERS = ["VEV_5200", "VEV_5300", "VEV_5400"]
-    VOUCHERS = GAMMA_VOUCHERS
+    VOUCHERS = ["VEV_5200", "VEV_5300"]
     STRIKES = {
         "VEV_5200": 5200.0,
         "VEV_5300": 5300.0,
-        "VEV_5400": 5400.0,
     }
     LIMITS = {
         VELVET: 200,
         "VEV_5200": 300,
         "VEV_5300": 300,
-        "VEV_5400": 300,
     }
 
     TTE_YEARS = 5.0 / 365.0
     FAIR_VOL = 0.34
     IV_EMA_ALPHA = 0.08
+    NO_NEW_BUYS_AFTER = 90_000
 
     LONG_CAP = {
         "VEV_5200": 80,
-        "VEV_5300": 8,
-        "VEV_5400": 35,
+        "VEV_5300": 6,
     }
     EDGE_TO_BID = {
-        "VEV_5200": 1.2,
-        "VEV_5300": 2.5,
-        "VEV_5400": 0.8,
+        "VEV_5200": 1.0,
+        "VEV_5300": 2.75,
     }
     ORDER_SIZE = {
         "VEV_5200": 5,
         "VEV_5300": 2,
-        "VEV_5400": 4,
-    }
-    TAKE_EDGE = {
-        "VEV_5200": 99.0,
-        "VEV_5300": 99.0,
-        "VEV_5400": 3.0,
-    }
-    TAKE_SIZE = {
-        "VEV_5200": 0,
-        "VEV_5300": 0,
-        "VEV_5400": 0,
     }
     PROFIT_TICKS = {
         "VEV_5200": 2.0,
         "VEV_5300": 1.25,
-        "VEV_5400": 1.5,
     }
     STOP_ADD_MARKOUT = {
-        "VEV_5200": -5.0,
-        "VEV_5300": -2.5,
-        "VEV_5400": -2.0,
+        "VEV_5200": -4.0,
+        "VEV_5300": -2.0,
     }
 
-    HEDGE_PASSIVE_THRESHOLD = 45.0
-    HEDGE_TAKER_THRESHOLD = 125.0
-    HEDGE_MAX_SLICE = 16
+    HEDGE_PASSIVE_THRESHOLD = 55.0
+    HEDGE_TAKER_THRESHOLD = 130.0
+    HEDGE_MAX_SLICE = 14
+    HEDGE_DELAY_TICKS = 2_500
+    SUPPORTIVE_MOMENTUM_THRESHOLD = 2.0
+    ADVERSE_MOMENTUM_THRESHOLD = -1.5
+    MAX_UNHEDGED_DELTA = 95.0
+    SPOT_HISTORY_MAXLEN = 8
 
     def run(self, state: TradingState) -> Tuple[Dict[str, List[Order]], int, str]:
         result: Dict[str, List[Order]] = {product: [] for product in state.order_depths}
@@ -115,10 +103,13 @@ class Trader:
         if spot is None:
             return result, 0, json.dumps(cache, separators=(",", ":"))
 
+        timestamp = int(getattr(state, "timestamp", 0))
+        self._update_spot_cache(cache, spot, timestamp)
         self._update_iv_cache(cache, state, spot)
         deltas: Dict[str, float] = {}
+        momentum = self._spot_momentum(cache)
 
-        for product in self.GAMMA_VOUCHERS:
+        for product in self.VOUCHERS:
             depth = state.order_depths.get(product)
             if depth is None:
                 continue
@@ -126,18 +117,26 @@ class Trader:
             fair = self._bs_call(spot, self.STRIKES[product], fair_vol)
             delta = self._bs_delta(spot, self.STRIKES[product], fair_vol)
             deltas[product] = delta
-            self._trade_gamma_voucher(product, depth, fair, cache, om)
+            self._trade_voucher(product, depth, fair, timestamp, momentum, cache, om)
 
         if velvet_depth is not None:
-            self._trade_velvet_hedge(velvet_depth, deltas, om)
+            self._trade_velvet_hedge(velvet_depth, deltas, timestamp, momentum, cache, om)
 
         self._sync_entry_cache_positions(cache, state)
         cache["spot"] = round(float(spot), 4)
-        cache["t"] = int(getattr(state, "timestamp", 0))
+        cache["mom"] = round(float(momentum), 4)
+        cache["t"] = timestamp
         return result, 0, json.dumps(cache, separators=(",", ":"))
 
-    def _trade_gamma_voucher(
-        self, product: str, depth: OrderDepth, fair: float, cache: Dict[str, Any], om: OrderManager
+    def _trade_voucher(
+        self,
+        product: str,
+        depth: OrderDepth,
+        fair: float,
+        timestamp: int,
+        momentum: float,
+        cache: Dict[str, Any],
+        om: OrderManager,
     ) -> None:
         bid, ask, _, _ = self._best_bid_ask(depth)
         if bid is None or ask is None:
@@ -146,12 +145,12 @@ class Trader:
         pos = om.pos(product)
         avg_entry = self._avg_entry(cache, product)
         if pos > 0:
-            sell_qty = self._profit_take_qty(product, bid, fair, avg_entry, pos)
+            sell_qty = self._profit_take_qty(product, bid, fair, avg_entry, pos, momentum)
             if sell_qty > 0:
                 self._sweep_sell(product, depth, bid, sell_qty, om)
                 pos = om.pos(product)
 
-        if pos >= self.LONG_CAP[product]:
+        if timestamp >= self.NO_NEW_BUYS_AFTER or pos >= self.LONG_CAP[product]:
             return
 
         mid = (bid + ask) / 2.0
@@ -164,21 +163,31 @@ class Trader:
             qty = min(self.ORDER_SIZE[product], self.LONG_CAP[product] - pos)
             om.add(product, bid_px, qty)
 
-        take_size = self.TAKE_SIZE[product]
-        if take_size > 0 and ask <= fair - self.TAKE_EDGE[product]:
-            qty = min(take_size, self.LONG_CAP[product] - om.pos(product))
-            self._sweep_buy(product, depth, ask, qty, om)
-
-    def _profit_take_qty(self, product: str, bid: int, fair: float, avg_entry: Optional[float], pos: int) -> int:
+    def _profit_take_qty(
+        self, product: str, bid: int, fair: float, avg_entry: Optional[float], pos: int, momentum: float
+    ) -> int:
         if pos <= 0:
             return 0
+        if momentum >= self.SUPPORTIVE_MOMENTUM_THRESHOLD and bid < fair + 1.5:
+            return 0
         if avg_entry is not None and bid >= avg_entry + self.PROFIT_TICKS[product]:
-            return min(6, max(1, pos // 2))
+            size = min(5, max(1, pos // 2))
+            if momentum >= self.SUPPORTIVE_MOMENTUM_THRESHOLD:
+                return max(1, size // 2)
+            return size
         if bid >= fair + 0.5:
-            return min(5, pos)
+            return min(4 if momentum < self.SUPPORTIVE_MOMENTUM_THRESHOLD else 2, pos)
         return 0
 
-    def _trade_velvet_hedge(self, depth: OrderDepth, deltas: Dict[str, float], om: OrderManager) -> None:
+    def _trade_velvet_hedge(
+        self,
+        depth: OrderDepth,
+        deltas: Dict[str, float],
+        timestamp: int,
+        momentum: float,
+        cache: Dict[str, Any],
+        om: OrderManager,
+    ) -> None:
         bid, ask, _, _ = self._best_bid_ask(depth)
         if bid is None or ask is None:
             return
@@ -190,33 +199,82 @@ class Trader:
         if abs(net_delta) < self.HEDGE_PASSIVE_THRESHOLD:
             return
 
-        qty = min(self.HEDGE_MAX_SLICE, max(1, int((abs(net_delta) - self.HEDGE_PASSIVE_THRESHOLD) * 0.35)))
+        if self._should_delay_hedge(net_delta, timestamp, momentum, cache):
+            return
+
+        qty = min(self.HEDGE_MAX_SLICE, max(1, int((abs(net_delta) - self.HEDGE_PASSIVE_THRESHOLD) * 0.30)))
         spread = ask - bid
         if net_delta > 0:
-            if net_delta > self.HEDGE_TAKER_THRESHOLD:
-                om.add(self.VELVET, bid, -qty)
-            else:
-                price = ask - 1 if spread > 2 else ask
-                om.add(self.VELVET, price, -qty)
+            price = bid if net_delta > self.HEDGE_TAKER_THRESHOLD else ask - 1 if spread > 2 else ask
+            om.add(self.VELVET, price, -qty)
         else:
-            if net_delta < -self.HEDGE_TAKER_THRESHOLD:
-                om.add(self.VELVET, ask, qty)
-            else:
-                price = bid + 1 if spread > 2 else bid
-                om.add(self.VELVET, price, qty)
+            price = ask if net_delta < -self.HEDGE_TAKER_THRESHOLD else bid + 1 if spread > 2 else bid
+            om.add(self.VELVET, price, qty)
+
+    def _should_delay_hedge(self, net_delta: float, timestamp: int, momentum: float, cache: Dict[str, Any]) -> bool:
+        if abs(net_delta) >= self.MAX_UNHEDGED_DELTA:
+            return False
+        if net_delta <= 0:
+            return False
+        if momentum <= self.ADVERSE_MOMENTUM_THRESHOLD:
+            return False
+
+        last_fill = cache.get("last_option_fill_t")
+        if isinstance(last_fill, (int, float)) and timestamp - int(last_fill) <= self.HEDGE_DELAY_TICKS:
+            return True
+        return momentum >= self.SUPPORTIVE_MOMENTUM_THRESHOLD
 
     def _update_entry_cache(self, cache: Dict[str, Any], state: TradingState) -> None:
         entries = cache.setdefault("entry", {})
         if not isinstance(entries, dict):
             entries = {}
             cache["entry"] = entries
+        seen = cache.setdefault("seen_trades", [])
+        if not isinstance(seen, list):
+            seen = []
+            cache["seen_trades"] = seen
+        seen_set = set(str(x) for x in seen)
 
-        for product in self.GAMMA_VOUCHERS:
+        for product in self.VOUCHERS:
             for trade in state.own_trades.get(product, []):
+                key = self._trade_key(product, trade)
+                if key in seen_set:
+                    continue
                 signed_qty = self._own_trade_signed_qty(trade)
                 if signed_qty == 0:
                     continue
                 self._apply_entry_fill(entries, product, float(trade.price), int(signed_qty))
+                cache["last_option_fill_t"] = int(getattr(trade, "timestamp", 0))
+                seen_set.add(key)
+
+        cache["seen_trades"] = list(seen_set)[-80:]
+
+    def _update_spot_cache(self, cache: Dict[str, Any], spot: float, timestamp: int) -> None:
+        history = cache.setdefault("spot_hist", [])
+        if not isinstance(history, list):
+            history = []
+        history.append([int(timestamp), round(float(spot), 4)])
+        cache["spot_hist"] = history[-self.SPOT_HISTORY_MAXLEN :]
+
+    def _spot_momentum(self, cache: Dict[str, Any]) -> float:
+        history = cache.get("spot_hist")
+        if not isinstance(history, list) or len(history) < 4:
+            return 0.0
+        values: List[float] = []
+        for item in history:
+            if isinstance(item, list) and len(item) >= 2 and isinstance(item[1], (int, float)):
+                values.append(float(item[1]))
+        if len(values) < 4:
+            return 0.0
+        fast = values[-1] - values[-3]
+        slow = values[-1] - values[0]
+        return 0.65 * fast + 0.35 * slow
+
+    def _trade_key(self, product: str, trade: Trade) -> str:
+        return (
+            f"{product}:{getattr(trade, 'timestamp', 0)}:{getattr(trade, 'price', 0)}:"
+            f"{getattr(trade, 'quantity', 0)}:{getattr(trade, 'buyer', '')}:{getattr(trade, 'seller', '')}"
+        )
 
     def _own_trade_signed_qty(self, trade: Trade) -> int:
         if getattr(trade, "buyer", None) == "SUBMISSION":
@@ -235,17 +293,15 @@ class Trader:
             new_qty = qty + signed_qty
             new_avg = ((avg * qty) + price * signed_qty) / new_qty if new_qty > 0 else 0.0
             entries[product] = {"qty": new_qty, "avg": round(new_avg, 6)}
-            return
-
-        sell_qty = -signed_qty
-        new_qty = max(0, qty - sell_qty)
-        entries[product] = {"qty": new_qty, "avg": round(avg if new_qty > 0 else 0.0, 6)}
+        else:
+            new_qty = max(0, qty + signed_qty)
+            entries[product] = {"qty": new_qty, "avg": round(avg if new_qty > 0 else 0.0, 6)}
 
     def _sync_entry_cache_positions(self, cache: Dict[str, Any], state: TradingState) -> None:
         entries = cache.setdefault("entry", {})
         if not isinstance(entries, dict):
             return
-        for product in self.GAMMA_VOUCHERS:
+        for product in self.VOUCHERS:
             pos = int(state.position.get(product, 0))
             item = entries.get(product)
             if pos <= 0:
@@ -267,7 +323,7 @@ class Trader:
             ivs = {}
             cache["iv"] = ivs
 
-        for product in self.GAMMA_VOUCHERS:
+        for product in self.VOUCHERS:
             depth = state.order_depths.get(product)
             mid = self._mid(depth)
             if mid is None:
@@ -285,13 +341,6 @@ class Trader:
         if isinstance(iv, (int, float)) and 0.05 <= float(iv) <= 1.0:
             return max(self.FAIR_VOL, float(iv) + 0.04)
         return self.FAIR_VOL
-
-    def _sweep_buy(self, product: str, depth: OrderDepth, max_price: int, qty: int, om: OrderManager) -> None:
-        remaining = max(0, int(qty))
-        for price, volume in sorted(depth.sell_orders.items()):
-            if remaining <= 0 or price > max_price:
-                break
-            remaining -= om.add(product, int(price), min(remaining, -int(volume)))
 
     def _sweep_sell(self, product: str, depth: OrderDepth, min_price: int, qty: int, om: OrderManager) -> None:
         remaining = max(0, int(qty))

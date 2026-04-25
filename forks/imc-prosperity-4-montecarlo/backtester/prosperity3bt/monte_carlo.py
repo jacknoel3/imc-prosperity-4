@@ -446,12 +446,16 @@ def synthetic_round3_session(
     session_dir: Path,
     rng: random.Random,
     ticks_per_day: int,
+    output_days: Optional[list[int]] = None,
+    shift_multiplier: float = 0.0,
 ) -> None:
     round_dir = session_dir / "round3"
     round_dir.mkdir(parents=True, exist_ok=True)
     products = model["products"]
     day_values = sorted(model["timestampsByDay"])
-    block_len = 250
+    if output_days is None:
+        output_days = [2]
+    configured_block_len = int(os.environ.get("PROSPERITY4MCBT_R3_BLOCK_LEN", "0"))
 
     price_fields = [
         "day",
@@ -475,14 +479,16 @@ def synthetic_round3_session(
     trade_fields = ["timestamp", "buyer", "seller", "symbol", "currency", "price", "quantity"]
 
     product_shifts = {
-        product: int(round(rng.gauss(0.0, max(0.5, stats["stdStep"]) * 2.0)))
+        product: int(round(rng.gauss(0.0, max(0.5, stats["stdStep"]) * shift_multiplier)))
         for product, stats in model["productStats"].items()
     }
 
-    for output_day in [0, 1, 2]:
+    for output_day in output_days:
         source_day = rng.choice(day_values)
         source_timestamps = model["timestampsByDay"][source_day]
         target_len = min(ticks_per_day, len(source_timestamps))
+        block_len = configured_block_len if configured_block_len > 0 else target_len
+        block_len = max(1, min(block_len, len(source_timestamps)))
         sampled_ts: list[int] = []
         while len(sampled_ts) < target_len:
             max_start = max(0, len(source_timestamps) - block_len)
@@ -1343,6 +1349,8 @@ def run_round3_python_monte_carlo(
     output_dir = dashboard_path.parent
     model = calibrate_round3_model(actual_dir)
     products = model["products"]
+    output_days = [2]
+    shift_multiplier = float(os.environ.get("PROSPERITY4MCBT_R3_SHIFT_MULTIPLIER", "0.0"))
     rng = random.Random(seed)
     trader_module = parse_algorithm_module(algorithm)
     session_rows: list[dict[str, Any]] = []
@@ -1354,7 +1362,14 @@ def run_round3_python_monte_carlo(
 
     for session_id in range(sessions):
         session_dir = sessions_dir / f"session_{session_id}"
-        synthetic_round3_session(model, session_dir, rng, ticks_per_day)
+        synthetic_round3_session(
+            model,
+            session_dir,
+            rng,
+            ticks_per_day,
+            output_days=output_days,
+            shift_multiplier=shift_multiplier,
+        )
         reader = FileSystemReader(session_dir)
         session_product_pnl = {product: 0.0 for product in products}
         session_product_paths = {
@@ -1363,7 +1378,7 @@ def run_round3_python_monte_carlo(
         }
         session_total_path = {"timestamps": [], "mtmPnl": []}
 
-        for day in [0, 1, 2]:
+        for day in output_days:
             trader = trader_module.Trader()
             result = run_backtest(
                 trader,
@@ -1456,6 +1471,8 @@ def run_round3_python_monte_carlo(
             "seed": seed,
             "sampleSessions": sample_sessions,
             "ticksPerDay": ticks_per_day,
+            "outputDays": output_days,
+            "shiftMultiplier": shift_multiplier,
         },
     )
     with dashboard_path.open("w", encoding="utf-8") as handle:

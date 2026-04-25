@@ -23,7 +23,8 @@
 2. **Option underlying**: price + vol feed into BS pricing for all VEV vouchers
 
 ### Delta Hedging (for voucher strategy)
-- VEV_5400 long → short 0.20 VEV per voucher to hedge delta
+- VEV_5400 long → short **0.15 VEV per voucher** to hedge delta (at IV=22%, TTE=5; recompute live as S and TTE change)
+- Earlier figure of 0.20 was wrong — computed with RV (34.2%) not market IV (22%)
 - Hedge passively (5-tick spread means aggressive take is expensive but manageable vs IPR's 13-tick)
 - Net risk after hedge: gamma + vega
 
@@ -33,7 +34,8 @@ VEV_FV       = 5250
 VEV_LIMIT    = 200
 VEV_EDGE     = 1          # tight spread — 1–2 tick edge
 VEV_OBI_THRESH = 0.15
-VEV_SIGMA    = 0.342      # realized annualized vol — update each day
+VEV_SIGMA_RV   = 0.342    # realized vol — for risk sizing only
+VEV_SIGMA_IV   = 0.22     # market implied vol — use this in BS for option fair value
 ```
 
 ### Confidence

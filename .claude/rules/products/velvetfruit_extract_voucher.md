@@ -3,7 +3,8 @@
 - Position limit: 300 per voucher
 - Strikes: 4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500
 - **TTE at R3 start: 5 days**
-- σ (realized): **34.2% annualized** — use for BS pricing
+- σ (market IV): **~22% annualized** — use for BS fair value in trader. This is what the market consistently prices at across all historical days (TTE=8,7,6). Do NOT use RV=34.2% for option fair value — that gives prices 15–30 ticks above market; nobody will fill you.
+- σ (realized): **34.2% annualized** — underlying's actual realized vol. Relevant for risk/gamma sizing, not for quoting.
 - S (underlying): ~5,250 — track live from VEV mid
 
 ### TTE by Round
@@ -18,20 +19,22 @@
 
 ### Strike Classification & Strategy
 
-| Strike | Moneyness | IV (avg) | Strategy |
-|--------|-----------|----------|----------|
-| 4000 | Deep ITM | 77.4% | **Skip** — delta≈1, price=VEV−K, no option edge |
-| 4500 | ITM | 45.7% | **Skip** — same as above |
-| 5000 | ATM | 33.6% | Passive MM — IV near fair |
-| 5100 | ATM | 33.2% | Passive MM — marginally cheap |
-| 5200 | ATM | 33.6% | Passive MM — fair-to-cheap |
-| 5300 | ATM | 33.9% | Passive MM — near-fair |
-| 5400 | ATM | 31.8% | **BUY** — avg −3.8 ticks below BS, 83% of buckets mispriced, best single trade |
-| 5500 | ATM | 34.5% | Passive MM — fair |
-| 6000 | Deep OTM | 54.6%* | **SELL at ask=1** — pinned at min tick, BS≈0, P(ITM)≈0.3% |
-| 6500 | Deep OTM | 82.7%* | **SELL at ask=1** — same, sell full limit |
+| Strike | Moneyness | IV (avg, hist.) | Strategy |
+|--------|-----------|-----------------|----------|
+| 4000 | Deep ITM | 79% (erratic) | **Skip** — delta≈1, price≈VEV−K, no option edge |
+| 4500 | ITM | 45% (erratic) | **Skip** — same as above |
+| 5000 | ATM | **23.3%** | Passive MM at BS(IV=22%) |
+| 5100 | ATM | **23.1%** | Passive MM at BS(IV=22%) |
+| 5200 | ATM | **23.3%** | Passive MM at BS(IV=22%) |
+| 5300 | ATM | **23.6%** | Passive MM at BS(IV=22%) |
+| 5400 | ATM | **22.1%** | Passive MM at BS(IV=22%), spread 1.4, 225 trades |
+| 5500 | ATM | **24.0%** | Passive MM at BS(IV=22%) |
+| 6000 | Deep OTM | ~38%* | **SELL at ask=1** — pinned at min tick, BS≈0, P(ITM)≈0% |
+| 6500 | Deep OTM | ~58%* | **SELL at ask=1** — same, sell full limit |
 
-*IV inflated by min-tick floor — not a real signal.
+*IV inflated by min-tick floor — not a real signal. Deep OTM IV figures are meaningless; strategy rationale is BS≈0.
+
+**IMPORTANT**: Earlier IV values of 33–35% for ATM strikes were wrong — confused with RV. Actual market IV is ~22% across all historical days. The "−3.8 ticks below BS" VEV_5400 signal was also wrong — it was theta decay (TTE=6→5 price drop), not a misprice vs realized vol.
 
 ### Black-Scholes Implementation
 ```python
@@ -47,35 +50,37 @@ def bs_call(S, K, T, sigma, r=0):
     return S*N(d1) - K*exp(-r*T)*N(d2)
 
 # T = days_remaining / 365
-# sigma = 0.342 (update if realized vol shifts)
+# sigma = 0.22 (market IV — what the bots price at; use this for quoting)
+# sigma = 0.342 is realized vol — do NOT use for BS fair value, only for risk sizing
 ```
 
-### Priority Trade: VEV_5400 (highest conviction)
-- Avg misprice: −3.8 ticks below BS (market is cheap)
-- Spread: 1.4 ticks — edge exceeds half-spread
-- 225 trades over 3 days — liquid enough for passive fills
-- Delta hedge: short 0.20 VEV per unit long
-- Entry: resting bid at `bs_call(S, 5400, T, 0.342) − 0.5`
-- Day-0 misprice is largest (−7.6 ticks); converges by day 2 (+0.2) — enter early
+### Most Active ATM Strike: VEV_5400
+- Spread: 1.4 ticks, 225 trades over 3 historical days — most liquid ATM strike
+- Fair value: `bs_call(S, 5400, T, 0.22)` — use market IV (0.22), NOT RV (0.342)
+- Strategy: passive MM, bid at fair−0.5, ask at fair+0.5
+- Delta at TTE=5, IV=22%: ≈ **0.15** per unit long (hedge short 0.15 VEV per voucher)
+- No directional buy thesis — earlier "−3.8 ticks below BS" was theta decay (TTE=6→5 price drop), not a misprice
 
 ### Priority Trade: VEV_6000 / VEV_6500 (free carry)
-- Market mid = 0.5 (bid=0, ask=1). BS≈0 for both.
-- Sell at ask=1 and collect 1 tick. Expires worthless with 99.7% probability.
-- Risk: VEV spike above 6,000 or 6,500 before expiry — at σ=34.2% and TTE=5d, P(VEV>6000)≈0.3%
+- Market mid = 0.5 (bid=0, ask=1). BS≈0 for both at any reasonable sigma.
+- Sell at ask=1 and collect 1 tick. Expires worthless with P(ITM)≈0% at TTE=5, S=5250.
+- Risk: VEV spike above 6,000 before expiry — negligible at σ=22% and TTE=5d
 - Sell up to full limit (300 each).
 
 ### Vol Surface Notes
-- ATM vol surface is flat at ~33–34% — no skew in ATM bucket
-- Market-wide implied vol slightly below realized (34.2%) — the whole ATM surface is cheap
-- IV intraday: declines slightly within each day; rises across days (TTE calendar effect) — use per-day T value
+- ATM vol surface is flat at **~22%** — no skew in ATM bucket
+- Market IV (22%) is well below realized vol (34.2%) but this is structural — the bots consistently price at 22%
+- IV intraday: declines slightly within each day; use per-day T value (TTE counts down 1 per day)
+- Do NOT use RV (34.2%) as sigma in BS for quoting — you'll post prices 15–30 ticks above market and never fill
 
 ### Warnings
 1. Deep ITM (4000, 4500) — skip. No option edge, just VEV exposure.
 2. Deep OTM (6000, 6500) — sell only. Do not buy (BS≈0).
-3. Do not use market orders on ATM strikes — spread is 1–6 ticks but signal is ~1.5 ticks. Passive only.
+3. Do not use market orders on ATM strikes — passive only.
 4. Delta hedge via VEV passively — VEV spread is 5 ticks, aggressive take is expensive.
+5. Use sigma=0.22 in BS (market IV), not sigma=0.342 (realized vol).
 
 ### Confidence
-- VEV_5400 misprice: medium (converges by day 2 — may vanish in R4/R5 as market discovers σ)
-- VEV_6000/6500 free carry: high (structural, tail risk negligible)
-- ATM vol surface pricing: high — stable σ, clean BS fit
+- ATM passive MM (IV=22%): high — stable, confirmed across all 3 historical days
+- VEV_6000/6500 free carry: high — structural, tail risk negligible
+- Delta hedge (0.15 VEV per voucher): medium — delta shifts as S and TTE change, recompute live
