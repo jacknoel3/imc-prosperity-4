@@ -518,3 +518,84 @@ Recommended bid: 1,500 XIRECs. It is within the convergence zone, defensible as 
 ⚠️ CRITICAL BLOCKER: trader.py at repo root is Round 0 code. This must be fixed before any MAF bid discussion matters.
 
 === END OF GATHERING ===
+
+---
+
+# Gathering — 2026-04-25T11:37:03Z
+
+**Question**: FAi in modo che gli agenti studino nel dettaglio tutte le strategie, capiscano cosa ha funzionato, cosa non ha funzionato, cosa abbbiamo testato e dibattano tra di loro per trovare la straetgia migliore, dove conviene puntare per massimizzare il PNL e raggiungere numero 1 globale e fai in modo che restituisca una strategia python nel path per vincere. Inoltre,  sappi che per ora le stats dei migliori al mondo sono queste: "Rank Entry Total PnL Max Drawdown Recovery Factor Avg Fill Percentile Rank ..." quindi queste sono le metriche minime da superare
+**Round**: Round 3
+**Roster**: quant-alpha, quant-beta, quant-gamma, quant-delta, quant-epsilon, researcher, coder, reviewer, orchestrator
+**Challengers**: quant-devils-advocate, quant-optimist
+**Context pack**:
+- Scope reviewed: phase2/round3/algo/analysis/ve_vev_eda.py, ve_vev_eda_output/{charts,tables}, phase2/round3/algo/strategy, and round3 backtest logs.
+- Best observed in tested strategies: strat7 and strat8 are positive; strat8 has better drawdown/recovery profile.
+- strat11 (turbo HYDROGEL) and strat13 (taker-depth probe) are strong negatives; aggressive/taker-heavy behavior is toxic.
+- gloves_off_vev_voucher_top1 stack had severe losses; complexity without strict risk caps underperformed.
+- EDA tables indicate persistent mid-strike voucher underpricing (especially 5200/5300/5400) and meaningful fill-quality differences by strike.
+- Passive execution quality dominates taker for options; taker costs are materially high.
+- HYDROGEL appears suitable as stable MM carry engine if inventory is tightly controlled.
+- Deep OTM floor mechanics can be monetized but require strict tail controls.
+- Key design principle: combine robust carry engine + selective voucher edge with regime guards and kill-switches.
+- Existing internal performance is still far below global top benchmarks.
+- External benchmark to beat: Total PnL >= 154,398, Max DD <= 10,423, Recovery >= 14.82, Avg Fill >= 12.91.
+- Objective: propose one production-ready strategy path maximizing upside while preserving survivability.
+
+---
+## quant-alpha — Round 1
+Position: prefer robust passive-first architecture and reject complexity-first escalation. Main claim: edge likely exists but is fragile; avoid overfitting and require strict validation. Recommended path is HYDROGEL carry + selective ATM voucher sleeve (5200/5300/5400), with hard caps and kill-switches. Confidence: medium-low to medium.
+Reasoning trace: assumptions = short sample and edge decay risk; evidence = strat8 risk profile beats alternatives, taker-heavy and complex stacks failed; inference = execution quality and risk governance dominate raw signal; conclusion = simple and risk-governed architecture is most credible.
+---
+
+## quant-beta — Round 1
+Position: microstructure favors passive execution; taker flow is structurally toxic in this round. Recommended plan: HYDROGEL MM as base + selective passive voucher quoting on 5200/5300/5400 with strict inventory caps and anti-toxicity filters. Confidence: medium-high.
+Reasoning trace: assumptions = crossing costs remain high; evidence = strat13 and aggressive variants negative while passive variants positive; inference = maximize fill-quality, not raw activity; conclusion = passive-first, strike-selective, risk-capped execution.
+---
+
+## quant-gamma — Round 1
+Position: barbell risk budget is required for top-rank attempt: stable carry + constrained convexity edge. Recommends fractional Kelly, product-level caps, and hard drawdown throttles.
+Reasoning trace: assumptions = benchmark is jointly constrained (PnL + DD + recovery + fill); evidence = strat8 improved DD/recovery while aggressive variants blew up; inference = uncapped sizing destroys survivability; conclusion = deploy with strict de-risk gates and tail controls.
+---
+
+## quant-delta — Round 1
+Position: execution-first design. Recommended: maker-first two-layer engine, minimal taker behavior, explicit placement/cancel logic, and emergency-only crossing for risk unwind.
+Reasoning trace: assumptions = implementation shortfall drives realized edge; evidence = passive outperforms taker in tested lineage; inference = alpha conversion depends on fill quality and queue-aware quoting; conclusion = production strategy should optimize execution realism and risk governors over feature count.
+---
+
+## quant-epsilon — Round 1
+Position: derivatives lens supports selective ATM long-vol/value sleeve (5200/5300/5400) with conservative deep OTM carry and disciplined hedge. Warns on jump-tail for 6000/6500 shorts.
+Reasoning trace: assumptions = IV/RV and strike-level mispricing persist short-horizon; evidence = positive passive ATM behavior and deep OTM floor mechanics; inference = net edge exists only under strict convexity caps; conclusion = combine ATM passive value capture with conservative tail-risk budgeting.
+---
+
+## researcher — Round 1
+From a researcher lens: the highest-probability route is a modular “robust core + selective edge” design. Evidence from tested files/logs indicates strat7/8 are positive, while aggressive/taker-heavy and over-complex stacks are negative. Inference: keep HYDROGEL as stabilizer and concentrate voucher risk only where persistent mispricing is strongest (5200/5300/5400), with strict drawdown and execution-quality gates. Conclusion: pursue repeatable passive edge over complexity expansion.
+---
+
+## coder — Round 1
+From a coder lens: implementation risk is a first-class failure mode. Given evidence that strat8-like discipline outperformed aggressive variants, the best production path is a simplified modular architecture with explicit per-product caps, passive-first voucher logic, delta-aware VE biasing, and hard kill-switch hooks. Conclusion: upgrade robustness and governance first, avoid all-signals monoliths.
+---
+
+## reviewer — Round 1
+From a reviewer lens: promote only strategies that improve PnL without degrading MaxDD/Recovery/Avg Fill jointly. Evidence favors strat8-style risk controls; reject taker-heavy variants and uncapped complexity. Required controls: side-capacity-safe order aggregation, inventory ceilings, and drawdown-based throttling. Conclusion: a constrained passive-first architecture is the only reviewable path toward top benchmarks.
+---
+
+## orchestrator — Round 1
+Orchestration view: winning is a sequencing and governance problem. Recommended deployment pattern: HYDROGEL passive carry as base, selective ATM voucher sleeve as alpha core, deep OTM carry as capped optional layer; all under centralized risk governor (inventory caps, toxicity gates, DD kill-switches). Conclusion: simplify strategy surface while tightening promotion gates.
+---
+
+## quant-devils-advocate — Challenger
+Strongest case against: current consensus may overprice stability of observed ATM edge; crowding can compress edge and degrade queue quality, turning passive expectancy negative via adverse selection. HYDROGEL stability may fail under adaptation. Scaling to #1 can amplify path dependence and left-tail events, especially if tail risk in deep OTM shorts is underestimated.
+---
+
+## quant-optimist — Challenger
+Strongest case for going further: biggest risk may be under-betting real edge early. If ATM mispricing is real and persistent, overly cautious sizing misses the highest-EV window before competition adapts. With already-defined risk caps and kill-switches, a controlled but larger early allocation to 5200/5300/5400 can materially improve leaderboard outcome.
+---
+
+## Main Claude synthesis
+Consensus: passive-first architecture is clearly preferred. The most defensible production path is HYDROGEL carry engine + selective ATM voucher edge (5200/5300/5400) + conservative deep OTM carry with strict caps. Core disagreement: how aggressively to size the ATM sleeve early. Devil warns of crowding/edge decay and hidden tail; Optimist warns of under-allocation and missed convex upside.
+
+Recommendation: deploy a strat8-style risk-governed foundation, add a focused ATM sleeve with strong gating, keep taker logic near-zero, and enforce hard risk governors (inventory ceilings, drawdown throttles, toxicity filters). This balances survivability with enough upside to target top-rank metrics.
+
+Next step: coder
+Record: appended to shared_reasoning.md (2026-04-25T11:37:03Z)
+=== END OF GATHERING ===
