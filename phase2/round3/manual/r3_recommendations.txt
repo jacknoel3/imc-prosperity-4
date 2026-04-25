@@ -9,50 +9,69 @@ Core assumptions:
 - Competitor distribution is scenario-based, not known.
 
 Behavioural modelling update:
-- Nash/mechanical anchor is 836.
-- Very few qualified teams are expected to bid meaningfully below/near 835.
-- Caution should push the mean upward, but margin discipline keeps it anchored.
-- Exact round numbers are given low weight.
-- Bids equal to +1, +2, or +3 above a multiple of 5 are preferred.
+- Nash/mechanical no-penalty anchor is b1=751, b2=836.
+- Very few qualified teams are modelled as pure no-penalty or noisy/manual bidders.
+- Competitors form an expected mean; behavioural archetypes bid from that belief; the implied mean is iterated to a fixed point.
+- Risk aversion affects bid 2 only. Bid 1 is optimised mechanically conditional on bid 2.
+- Caution pushes the mean upward, but margin discipline keeps archetypes partly anchored.
+- Exact round numbers are given low weight; reserve+1 prices remain preferred.
 
 Scenario summary:
-scenario  mean_of_mean  std_of_mean    p1_mean    p5_mean  p25_mean  median_mean  p75_mean   p95_mean  p99_mean  best_b1  best_b2  best_expected_pnl_per_gardener  prob_best_b2_above_mean
-     low    847.094291     0.117322 846.821500 846.902250 847.01450    847.09375  847.1735 847.288250 847.36700      761      851                       83.588235                      1.0
- central    852.697205     0.138675 852.373497 852.468000 852.60450    852.69725  852.7910 852.924500 853.01925      761      856                       83.078431                      1.0
-    high    859.181495     0.149236 858.833997 858.935988 859.08175    859.18075  859.2810 859.427262 859.53425      766      861                       82.372549                      1.0
+scenario  scenario_weight  mean_of_mean  std_of_mean    p1_mean   p5_mean  p25_mean  median_mean  p75_mean  p95_mean  p99_mean  best_b1  best_b2  best_expected_pnl_per_gardener  prob_best_b2_above_mean
+     low             0.25    846.197213     0.027217 846.133250 846.15225 846.17875   846.197250  846.2155 846.24175 846.25950      756      846                       83.791753                   0.0000
+ central             0.55    851.922305     0.034843 851.840747 851.86525 851.89825   851.922500  851.9460 851.97950 852.00225      761      852                       83.235141                   0.9884
+    high             0.20    882.952487     0.049137 882.835250 882.87075 882.92000   882.953125  882.9860 883.03175 883.06450      776      883                       77.347768                   0.8321
 
 Top EV bid pair by scenario:
-- low: b1=761, b2=851, EV/gardener=83.5882, P(b2 > mean)=1.000
-- central: b1=761, b2=856, EV/gardener=83.0784, P(b2 > mean)=1.000
-- high: b1=766, b2=861, EV/gardener=82.3725, P(b2 > mean)=1.000
+- low: b1=756, b2=846, EV/gardener=83.7918, P(b2 > mean)=0.000
+- central: b1=761, b2=852, EV/gardener=83.2351, P(b2 > mean)=0.988
+- high: b1=776, b2=883, EV/gardener=77.3478, P(b2 > mean)=0.832
 
 Central scenario top 10:
- b1  b2  expected_pnl_per_gardener  prob_b2_above_mean  mean_shortfall_if_fails
-761 856                  83.078431             1.00000                 0.000000
-766 856                  82.980392             1.00000                 0.000000
-756 856                  82.980392             1.00000                 0.000000
-761 853                  82.881589             0.98515                 0.000723
-756 853                  82.842330             0.98515                 0.000723
-766 853                  82.724768             0.98515                 0.000723
-761 857                  82.705882             1.00000                 0.000000
-771 856                  82.686275             1.00000                 0.000000
-751 856                  82.686275             1.00000                 0.000000
-766 857                  82.627451             1.00000                 0.000000
+ b1  b2  expected_pnl_per_gardener  prob_b2_above_mean  mean_shortfall_unconditional  mean_shortfall_if_fails
+761 852                  83.235141              0.9884                      0.000144                 0.012841
+756 852                  83.215525              0.9884                      0.000144                 0.012841
+761 856                  83.078431              1.0000                      0.000000                 0.000000
+766 852                  83.058679              0.9884                      0.000144                 0.012841
+751 852                  82.999830              0.9884                      0.000144                 0.012841
+766 856                  82.980392              1.0000                      0.000000                 0.000000
+756 856                  82.980392              1.0000                      0.000000                 0.000000
+761 853                  82.882353              1.0000                      0.000000                 0.000000
+756 853                  82.843137              1.0000                      0.000000                 0.000000
+766 853                  82.725490              1.0000                      0.000000                 0.000000
 
 Central scenario safety table:
  target_clear_percentile  mean_quantile  suggested_b1  suggested_b2  expected_pnl_per_gardener_under_distribution  actual_prob_b2_above_mean
-                    50.0     852.697250           761           853                                     82.881589                    0.98515
-                    60.0     852.732850           761           853                                     82.881589                    0.98515
-                    70.0     852.770000           761           853                                     82.881589                    0.98515
-                    75.0     852.791000           761           853                                     82.881589                    0.98515
-                    80.0     852.812750           761           853                                     82.881589                    0.98515
-                    85.0     852.840037           761           853                                     82.881589                    0.98515
-                    90.0     852.876500           761           853                                     82.881589                    0.98515
-                    95.0     852.924500           761           853                                     82.881589                    0.98515
-                    97.5     852.967750           761           853                                     82.881589                    0.98515
-                    99.0     853.019250           761           854                                     82.529412                    1.00000
+                    50.0      851.92250           761           852                                     83.235141                     0.9884
+                    60.0      851.93125           761           852                                     83.235141                     0.9884
+                    70.0      851.94100           761           852                                     83.235141                     0.9884
+                    75.0      851.94600           761           852                                     83.235141                     0.9884
+                    80.0      851.95200           761           852                                     83.235141                     0.9884
+                    85.0      851.95875           761           852                                     83.235141                     0.9884
+                    90.0      851.96675           761           852                                     83.235141                     0.9884
+                    95.0      851.97950           761           852                                     83.235141                     0.9884
+                    97.5      851.98950           761           852                                     83.235141                     0.9884
+                    99.0      852.00225           761           853                                     82.882353                     1.0000
+
+Robust candidate table across scenarios:
+ b1  b2  weighted_ev  average_ev    min_ev  weighted_regret  max_regret    low_ev  central_ev   high_ev  low_p_clear  central_p_clear  high_p_clear
+766 856    79.339043   76.911477 64.773647         2.857776   12.574121 82.980392   82.980392 64.773647          1.0           1.0000        0.0000
+766 852    79.258523   76.725073 64.057717         2.938297   13.290051 83.058824   83.058679 64.057717          1.0           0.9884        0.0000
+766 861    79.064871   76.859753 65.834161         3.131948   11.513607 82.372549   82.372549 65.834161          1.0           1.0000        0.0000
+766 853    79.013983   76.539645 64.167954         3.182837   13.179815 82.725490   82.725490 64.167954          1.0           1.0000        0.0000
+766 851    79.003665   76.608846 63.952239         3.193154   13.395529 83.392157   82.482142 63.952239          1.0           0.0000        0.0000
+771 866    78.746347   76.930186 67.849380         3.450473    9.498388 81.470588   81.470588 67.849380          1.0           1.0000        0.0000
+771 871    78.386519   76.931780 69.658084         3.810301    7.689684 80.568627   80.568627 69.658084          1.0           1.0000        0.0000
+771 876    78.010042   77.036345 72.167859         4.186777    5.179909 79.470588   79.470588 72.167859          1.0           1.0000        0.0000
+776 881    77.717853   77.412107 75.883381         4.478967    5.615283 78.176471   78.176471 75.883381          1.0           1.0000        0.0000
+776 883    77.351907   77.351217 77.347768         4.844913    6.438812 77.352941   77.352941 77.347768          1.0           1.0000        0.8321
+766 848    77.156435   75.312029 63.469417         5.040385   13.878351 82.980392   79.486278 63.469417          1.0           0.0000        0.0000
+766 847    76.932371   75.215513 63.385686         5.264449   13.962082 83.294118   78.966735 63.385686          1.0           0.0000        0.0000
+776 886    76.784314   76.784314 76.784314         5.412506    7.007439 76.784314   76.784314 76.784314          1.0           1.0000        1.0000
+766 846    76.674210   75.065391 63.305327         5.522609   14.042442 83.422735   78.468111 63.305327          0.0           0.0000        0.0000
+776 891    75.196078   75.196078 75.196078         7.000741    8.595675 75.196078   75.196078 75.196078          1.0           1.0000        1.0000
 
 Interpretation:
-The EV-optimal fixed pair can sometimes tolerate a modest probability of not clearing the mean because the penalty may be smaller than the margin lost from overbidding. If you strongly want to avoid the penalty, prefer the quantile/safety table rather than the raw EV top pair.
-The central scenario is probably the most relevant if you believe the field is logical, cautious, concentrated, and still anchored by the 836 mechanical optimum.
-The low scenario represents stronger last-year/Nash anchoring. The high scenario represents stronger caution around the strict above-mean rule.
+The EV-optimal fixed pair depends strongly on the behavioural fixed point. A modest miss can sometimes be tolerable because the cubic factor is mild near the mean, but it becomes expensive several ticks below the field.
+The robust table is the best place to choose between candidate bids: it shows weighted EV using scenario weights low=25%, central=55%, high=20%, plus worst-scenario EV, regret, and clear probability under each fixed point.
+The low scenario represents stronger margin anchoring. The high scenario represents stronger caution around the strict above-mean rule.

@@ -1,0 +1,7 @@
+component,kind,mass,reference_mean,target_bid,expected_component_bid,sigma
+pure_best_response,pure_best_response,0.42,851.9219950654857,852.0,851.8804438291772,0.9
+minimum_clear,minimum_clear,0.16,849.5336958056629,850.0,850.4438277113161,0.8
+one_level_buffer,level_buffer,0.29,848.7375960523885,851.0,851.2959665111808,1.1
+two_level_buffer,level_buffer,0.12,847.14539654584,856.0,856.2998393600841,1.2
+pure_no_penalty_anchor,fixed,0.005,851.9219950654857,836.0,836.3048447786858,0.8
+qualified_noise,noisy_qualified,0.005,849.5336958056629,849.5336958056629,849.5563618426675,5.0
