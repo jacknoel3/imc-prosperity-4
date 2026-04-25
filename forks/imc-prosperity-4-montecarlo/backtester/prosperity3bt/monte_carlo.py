@@ -39,6 +39,7 @@ ROUND3_PRODUCTS = [
     "VEV_6500",
 ]
 ROUND3_SPOT_PRODUCTS = {"HYDROGEL_PACK", "VELVETFRUIT_EXTRACT"}
+ROUND3_OPTION_PRODUCTS = {product for product in ROUND3_PRODUCTS if product.startswith("VEV_")}
 GENERATED_OUTPUT_FILES = {
     "dashboard.json",
     "session_summary.csv",
@@ -369,6 +370,85 @@ def product_mid(row: dict[str, str]) -> float:
     return float(cleaned_number(row["mid_price"]))
 
 
+def clamp(value: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, value))
+
+
+def round3_stress_profile(name: str) -> dict[str, float | str]:
+    profiles: dict[str, dict[str, float | str]] = {
+        "none": {
+            "name": "none",
+            "spreadMultiplier": 1.0,
+            "depthMultiplier": 1.0,
+            "tradeKeepProbability": 1.0,
+            "spotShiftStd": 0.0,
+            "surfaceShiftStd": 0.0,
+            "surfaceTiltStd": 0.0,
+        },
+        "conservative": {
+            "name": "conservative",
+            "spreadMultiplier": 1.15,
+            "depthMultiplier": 0.85,
+            "tradeKeepProbability": 0.85,
+            "spotShiftStd": 3.0,
+            "surfaceShiftStd": 2.0,
+            "surfaceTiltStd": 1.0,
+        },
+        "adverse": {
+            "name": "adverse",
+            "spreadMultiplier": 1.35,
+            "depthMultiplier": 0.65,
+            "tradeKeepProbability": 0.65,
+            "spotShiftStd": 6.0,
+            "surfaceShiftStd": 5.0,
+            "surfaceTiltStd": 2.5,
+        },
+    }
+    if name not in profiles:
+        valid = ", ".join(sorted(profiles))
+        raise ValueError(f"Unknown Round 3 stress profile {name!r}; expected one of: {valid}")
+    return dict(profiles[name])
+
+
+def round3_stress_config(
+    profile: str,
+    spread_multiplier: Optional[float] = None,
+    depth_multiplier: Optional[float] = None,
+    trade_keep_probability: Optional[float] = None,
+    spot_shift_std: Optional[float] = None,
+    surface_shift_std: Optional[float] = None,
+    surface_tilt_std: Optional[float] = None,
+) -> dict[str, float | str]:
+    config = round3_stress_profile(profile)
+    overrides = {
+        "spreadMultiplier": spread_multiplier,
+        "depthMultiplier": depth_multiplier,
+        "tradeKeepProbability": trade_keep_probability,
+        "spotShiftStd": spot_shift_std,
+        "surfaceShiftStd": surface_shift_std,
+        "surfaceTiltStd": surface_tilt_std,
+    }
+    for key, value in overrides.items():
+        if value is not None:
+            config[key] = value
+    config["spreadMultiplier"] = max(1.0, float(config["spreadMultiplier"]))
+    config["depthMultiplier"] = clamp(float(config["depthMultiplier"]), 0.05, 2.0)
+    config["tradeKeepProbability"] = clamp(float(config["tradeKeepProbability"]), 0.0, 1.0)
+    config["spotShiftStd"] = max(0.0, float(config["spotShiftStd"]))
+    config["surfaceShiftStd"] = max(0.0, float(config["surfaceShiftStd"]))
+    config["surfaceTiltStd"] = max(0.0, float(config["surfaceTiltStd"]))
+    return config
+
+
+def vev_strike(product: str) -> Optional[int]:
+    if not product.startswith("VEV_"):
+        return None
+    try:
+        return int(product.rsplit("_", 1)[1])
+    except ValueError:
+        return None
+
+
 def calibrate_round3_model(actual_dir: Path) -> dict[str, Any]:
     price_rows = read_round3_rows(actual_dir, "prices")
     trade_rows = read_round3_rows(actual_dir, "trades")
@@ -427,18 +507,82 @@ def numeric_price(value: str, shift: int = 0) -> str:
     return str(max(0, adjusted))
 
 
-def shifted_price_row(source: dict[str, str], day: int, timestamp: int, shift: int) -> dict[str, str]:
+def adjusted_volume(value: str, depth_multiplier: float) -> str:
+    if value in ("", None):
+        return ""
+    volume = int(float(cleaned_number(value)))
+    if volume == 0:
+        return "0"
+    stressed = int(round(abs(volume) * depth_multiplier))
+    stressed = max(1, stressed)
+    return str(stressed if volume > 0 else -stressed)
+
+
+def stressed_price(value: str, mid: float, shift: int, side: str, spread_multiplier: float) -> str:
+    if value in ("", None):
+        return ""
+    raw = float(cleaned_number(value)) + shift
+    shifted_mid = mid + shift
+    distance = abs(raw - shifted_mid)
+    if side == "bid":
+        adjusted = shifted_mid - distance * spread_multiplier
+        return str(max(0, int(math.floor(adjusted))))
+    adjusted = shifted_mid + distance * spread_multiplier
+    return str(max(0, int(math.ceil(adjusted))))
+
+
+def shifted_price_row(
+    source: dict[str, str],
+    day: int,
+    timestamp: int,
+    shift: int,
+    stress_config: Optional[dict[str, float | str]] = None,
+) -> dict[str, str]:
     row = dict(source)
     row["day"] = str(day)
     row["timestamp"] = str(timestamp)
-    for key in ["bid_price_1", "bid_price_2", "bid_price_3", "ask_price_1", "ask_price_2", "ask_price_3"]:
-        row[key] = numeric_price(row.get(key, ""), shift)
+    stress_config = stress_config or round3_stress_profile("none")
+    spread_multiplier = float(stress_config["spreadMultiplier"])
+    depth_multiplier = float(stress_config["depthMultiplier"])
+    mid = float(cleaned_number(source["mid_price"]))
+    for key in ["bid_price_1", "bid_price_2", "bid_price_3"]:
+        row[key] = stressed_price(row.get(key, ""), mid, shift, "bid", spread_multiplier)
+    for key in ["ask_price_1", "ask_price_2", "ask_price_3"]:
+        row[key] = stressed_price(row.get(key, ""), mid, shift, "ask", spread_multiplier)
     for key in ["bid_volume_1", "bid_volume_2", "bid_volume_3", "ask_volume_1", "ask_volume_2", "ask_volume_3"]:
         if row.get(key, "") not in ("", None):
-            row[key] = str(int(float(cleaned_number(row[key]))))
+            row[key] = adjusted_volume(row[key], depth_multiplier)
     row["mid_price"] = str(max(0.0, float(cleaned_number(row["mid_price"])) + shift))
     row["profit_and_loss"] = "0.0"
     return row
+
+
+def round3_session_shifts(
+    products: list[str],
+    product_stats: dict[str, Any],
+    rng: random.Random,
+    shift_multiplier: float,
+    stress_config: dict[str, float | str],
+) -> dict[str, int]:
+    spot_shift = rng.gauss(0.0, float(stress_config["spotShiftStd"]))
+    surface_shift = rng.gauss(0.0, float(stress_config["surfaceShiftStd"]))
+    surface_tilt = rng.gauss(0.0, float(stress_config["surfaceTiltStd"]))
+    shifts: dict[str, int] = {}
+    for product in products:
+        base_shift = rng.gauss(0.0, max(0.5, product_stats[product]["stdStep"]) * shift_multiplier)
+        if product == "VELVETFRUIT_EXTRACT":
+            stress_shift = spot_shift
+        elif product == "HYDROGEL_PACK":
+            stress_shift = rng.gauss(0.0, float(stress_config["spotShiftStd"]) * 0.5)
+        elif product in ROUND3_OPTION_PRODUCTS:
+            strike = vev_strike(product) or 5250
+            moneyness = clamp((5250 - strike) / 1250.0, -1.0, 1.0)
+            delta_like = clamp(0.55 + moneyness * 0.35, 0.05, 0.95)
+            stress_shift = surface_shift + delta_like * spot_shift + moneyness * surface_tilt
+        else:
+            stress_shift = 0.0
+        shifts[product] = int(round(base_shift + stress_shift))
+    return shifts
 
 
 def synthetic_round3_session(
@@ -448,6 +592,7 @@ def synthetic_round3_session(
     ticks_per_day: int,
     output_days: Optional[list[int]] = None,
     shift_multiplier: float = 0.0,
+    stress_config: Optional[dict[str, float | str]] = None,
 ) -> None:
     round_dir = session_dir / "round3"
     round_dir.mkdir(parents=True, exist_ok=True)
@@ -455,6 +600,7 @@ def synthetic_round3_session(
     day_values = sorted(model["timestampsByDay"])
     if output_days is None:
         output_days = [2]
+    stress_config = stress_config or round3_stress_profile("none")
     configured_block_len = int(os.environ.get("PROSPERITY4MCBT_R3_BLOCK_LEN", "0"))
 
     price_fields = [
@@ -478,10 +624,14 @@ def synthetic_round3_session(
     ]
     trade_fields = ["timestamp", "buyer", "seller", "symbol", "currency", "price", "quantity"]
 
-    product_shifts = {
-        product: int(round(rng.gauss(0.0, max(0.5, stats["stdStep"]) * shift_multiplier)))
-        for product, stats in model["productStats"].items()
-    }
+    product_shifts = round3_session_shifts(
+        products,
+        model["productStats"],
+        rng,
+        shift_multiplier,
+        stress_config,
+    )
+    trade_keep_probability = float(stress_config["tradeKeepProbability"])
 
     for output_day in output_days:
         source_day = rng.choice(day_values)
@@ -503,7 +653,15 @@ def synthetic_round3_session(
                 timestamp = index * 100
                 source_rows = model["pricesByDayTs"][source_day][source_ts]
                 for product in products:
-                    writer.writerow(shifted_price_row(source_rows[product], output_day, timestamp, product_shifts[product]))
+                    writer.writerow(
+                        shifted_price_row(
+                            source_rows[product],
+                            output_day,
+                            timestamp,
+                            product_shifts[product],
+                            stress_config,
+                        )
+                    )
 
         with (round_dir / f"trades_round_3_day_{output_day}.csv").open("w", encoding="utf-8", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=trade_fields, delimiter=";")
@@ -511,6 +669,8 @@ def synthetic_round3_session(
             for index, source_ts in enumerate(sampled_ts):
                 timestamp = index * 100
                 for trade in model["tradesByDayTs"].get(source_day, {}).get(source_ts, []):
+                    if rng.random() > trade_keep_probability:
+                        continue
                     row = {field: trade.get(field, "") for field in trade_fields}
                     row["timestamp"] = str(timestamp)
                     row["price"] = numeric_price(row["price"], product_shifts.get(row["symbol"], 0))
@@ -1341,6 +1501,13 @@ def run_round3_python_monte_carlo(
     fv_mode: str,
     trade_mode: str,
     tomato_support: str,
+    r3_stress: str = "none",
+    r3_spread_multiplier: Optional[float] = None,
+    r3_depth_multiplier: Optional[float] = None,
+    r3_trade_keep_probability: Optional[float] = None,
+    r3_spot_shift_std: Optional[float] = None,
+    r3_surface_shift_std: Optional[float] = None,
+    r3_surface_tilt_std: Optional[float] = None,
 ) -> dict[str, Any]:
     actual_dir = resolve_round3_actual_dir(data_root)
     if actual_dir is None:
@@ -1351,6 +1518,15 @@ def run_round3_python_monte_carlo(
     products = model["products"]
     output_days = [2]
     shift_multiplier = float(os.environ.get("PROSPERITY4MCBT_R3_SHIFT_MULTIPLIER", "0.0"))
+    stress_config = round3_stress_config(
+        r3_stress,
+        spread_multiplier=r3_spread_multiplier,
+        depth_multiplier=r3_depth_multiplier,
+        trade_keep_probability=r3_trade_keep_probability,
+        spot_shift_std=r3_spot_shift_std,
+        surface_shift_std=r3_surface_shift_std,
+        surface_tilt_std=r3_surface_tilt_std,
+    )
     rng = random.Random(seed)
     trader_module = parse_algorithm_module(algorithm)
     session_rows: list[dict[str, Any]] = []
@@ -1369,6 +1545,7 @@ def run_round3_python_monte_carlo(
             ticks_per_day,
             output_days=output_days,
             shift_multiplier=shift_multiplier,
+            stress_config=stress_config,
         )
         reader = FileSystemReader(session_dir)
         session_product_pnl = {product: 0.0 for product in products}
@@ -1473,6 +1650,7 @@ def run_round3_python_monte_carlo(
             "ticksPerDay": ticks_per_day,
             "outputDays": output_days,
             "shiftMultiplier": shift_multiplier,
+            "round3Stress": stress_config,
         },
     )
     with dashboard_path.open("w", encoding="utf-8") as handle:
@@ -1492,6 +1670,13 @@ def run_rust_monte_carlo(
     python_bin: str,
     sample_sessions: int,
     ticks_per_day: int = 10000,
+    r3_stress: str = "none",
+    r3_spread_multiplier: Optional[float] = None,
+    r3_depth_multiplier: Optional[float] = None,
+    r3_trade_keep_probability: Optional[float] = None,
+    r3_spot_shift_std: Optional[float] = None,
+    r3_surface_shift_std: Optional[float] = None,
+    r3_surface_tilt_std: Optional[float] = None,
 ) -> None:
     actual_dir = resolve_actual_dir(data_root)
     simulator_dir = rust_dir()
@@ -1544,6 +1729,13 @@ def run_monte_carlo_mode(
     python_bin: str,
     sample_sessions: int,
     ticks_per_day: int = 10000,
+    r3_stress: str = "none",
+    r3_spread_multiplier: Optional[float] = None,
+    r3_depth_multiplier: Optional[float] = None,
+    r3_trade_keep_probability: Optional[float] = None,
+    r3_spot_shift_std: Optional[float] = None,
+    r3_surface_shift_std: Optional[float] = None,
+    r3_surface_tilt_std: Optional[float] = None,
 ) -> dict[str, Any]:
     output_dir = dashboard_path.parent
     if output_dir.exists():
@@ -1569,6 +1761,13 @@ def run_monte_carlo_mode(
             fv_mode=fv_mode,
             trade_mode=trade_mode,
             tomato_support=tomato_support,
+            r3_stress=r3_stress,
+            r3_spread_multiplier=r3_spread_multiplier,
+            r3_depth_multiplier=r3_depth_multiplier,
+            r3_trade_keep_probability=r3_trade_keep_probability,
+            r3_spot_shift_std=r3_spot_shift_std,
+            r3_surface_shift_std=r3_surface_shift_std,
+            r3_surface_tilt_std=r3_surface_tilt_std,
         )
 
     run_rust_monte_carlo(
@@ -1583,6 +1782,13 @@ def run_monte_carlo_mode(
         python_bin=python_bin,
         sample_sessions=sample_sessions,
         ticks_per_day=ticks_per_day,
+        r3_stress=r3_stress,
+        r3_spread_multiplier=r3_spread_multiplier,
+        r3_depth_multiplier=r3_depth_multiplier,
+        r3_trade_keep_probability=r3_trade_keep_probability,
+        r3_spot_shift_std=r3_spot_shift_std,
+        r3_surface_shift_std=r3_surface_shift_std,
+        r3_surface_tilt_std=r3_surface_tilt_std,
     )
 
     dashboard = build_dashboard(

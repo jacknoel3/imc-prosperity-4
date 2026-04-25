@@ -84,6 +84,37 @@ def cli(
             help="Number of 100-timestamp steps per simulated Round 3 day. 10000 gives a full 1,000,000 timestamp day.",
         ),
     ] = 10000,
+    r3_stress: Annotated[
+        str,
+        Option(
+            "--r3-stress",
+            help="Optional Round 3 stress profile: none, conservative, or adverse.",
+        ),
+    ] = "none",
+    r3_spread_multiplier: Annotated[
+        Optional[float],
+        Option("--r3-spread-multiplier", help="Override Round 3 stress spread multiplier; values below 1 are clamped to 1."),
+    ] = None,
+    r3_depth_multiplier: Annotated[
+        Optional[float],
+        Option("--r3-depth-multiplier", help="Override Round 3 stress book-depth multiplier."),
+    ] = None,
+    r3_trade_keep_probability: Annotated[
+        Optional[float],
+        Option("--r3-trade-keep-probability", help="Override Round 3 public-trade replay keep probability."),
+    ] = None,
+    r3_spot_shift_std: Annotated[
+        Optional[float],
+        Option("--r3-spot-shift-std", help="Override Round 3 coherent spot-shift standard deviation in ticks."),
+    ] = None,
+    r3_surface_shift_std: Annotated[
+        Optional[float],
+        Option("--r3-surface-shift-std", help="Override Round 3 coherent option-surface shift standard deviation in ticks."),
+    ] = None,
+    r3_surface_tilt_std: Annotated[
+        Optional[float],
+        Option("--r3-surface-tilt-std", help="Override Round 3 option-surface tilt standard deviation in ticks."),
+    ] = None,
     version: Annotated[
         bool,
         Option("--version", "-v", help="Show the program's version number and exit.", is_eager=True, callback=version_callback),
@@ -117,6 +148,13 @@ def cli(
         python_bin=python_bin,
         sample_sessions=sample_sessions,
         ticks_per_day=ticks_per_day,
+        r3_stress=r3_stress,
+        r3_spread_multiplier=r3_spread_multiplier,
+        r3_depth_multiplier=r3_depth_multiplier,
+        r3_trade_keep_probability=r3_trade_keep_probability,
+        r3_spot_shift_std=r3_spot_shift_std,
+        r3_surface_shift_std=r3_surface_shift_std,
+        r3_surface_tilt_std=r3_surface_tilt_std,
     )
 
     total_stats = dashboard["overall"]["totalPnl"]
