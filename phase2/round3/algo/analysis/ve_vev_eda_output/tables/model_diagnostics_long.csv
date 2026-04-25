@@ -104,9 +104,9 @@ M23,Delta-hedged residual AR(1),Delta-hedged option residuals,implemented,metric
 M23,Delta-hedged residual AR(1),Delta-hedged option residuals,implemented,metric_min_residual_acf1,-0.25078771937164623
 M24,Gamma-scalping PnL attribution,Option gamma portfolios,implemented,metric_best_net_gamma_scalp,29.176428401711224
 M24,Gamma-scalping PnL attribution,Option gamma portfolios,implemented,metric_positive_strikes,8.0
-M25,No-arbitrage persistence survival proxy,No-arb signals,implemented,metric_total_flags,11810.0
-M25,No-arbitrage persistence survival proxy,No-arb signals,implemented,metric_mean_lifetime,1.2251230950512197
-M26,Constrained cross-sectional option-pricing regression,Option cross-section,implemented,metric_noarb_flags,11810.0
+M25,No-arbitrage persistence survival proxy,No-arb signals,implemented,metric_total_flags,11801.0
+M25,No-arbitrage persistence survival proxy,No-arb signals,implemented,metric_mean_lifetime,1.257283537201394
+M26,Constrained cross-sectional option-pricing regression,Option cross-section,implemented,metric_noarb_flags,11801.0
 M27,Voucher fill-probability model,Voucher fills,implemented,metric_mean_trade_rate,0.005553333333333334
 M28,Avellaneda-Stoikov market-making proxy,Market-making controls,implemented,metric_spread_mean,4.988133333333334
 M28,Avellaneda-Stoikov market-making proxy,Market-making controls,implemented,metric_rv500_mean,0.41192808095442346

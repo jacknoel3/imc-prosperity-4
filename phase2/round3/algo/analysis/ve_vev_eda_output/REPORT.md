@@ -503,7 +503,7 @@ First quantitative answer rows (no embedded question text):
 | Q2 | vol_iv | proxy_measured_needs_execution_validation | cost_adjusted_gamma_scalp_proxy_max | -0.18217235138740723 | mean_cost_to_midpoint_ratio | 58.787786254511616 | research_gamma_hedge_cost_sensitivity.csv |
 | Q3 | gamma | proxy_measured_needs_execution_validation | best_cost_adjusted_voucher | VEV_6000 | best_cost_adjusted_pnl | -0.18217235138740723 | research_gamma_hedge_cost_sensitivity.csv |
 | Q4 | vol_iv | measured_from_current_data | mean_gap_phi | 0.993341423339309 | mean_half_life_ticks | 108.99332547398019 | research_iv_gap_mean_reversion.csv |
-| Q5 | vol_iv | proxy_measured_needs_execution_validation | ema_signal_hit_rate_max | 0.7966804979253111 | signal_count_total | 3733 | research_atm_iv_ema_signals.csv |
+| Q5 | vol_iv | proxy_measured_needs_execution_validation | ema_signal_hit_rate_max | 0.9869281045751634 | signal_count_total | 3589 | research_atm_iv_ema_signals.csv |
 | Q6 | atm | measured_from_current_data | top_atm_proxy | VEV_5200 | top_atm_proxy_fraction | 0.518 | research_atm_proxy_counts.csv |
 | Q7 | hedge | proxy_measured_needs_execution_validation | mean_cost_to_midpoint_pnl_ratio | 58.787786254511616 | underlying_mean_spread | 4.988133333333334 | research_gamma_hedge_cost_sensitivity.csv |
 | Q8 | hedge | proxy_measured_needs_execution_validation | best_delta_rehedge_threshold | 0.2 | objective_cost_plus_error | 4135.800947708994 | research_hedge_threshold_grid.csv |
@@ -549,7 +549,7 @@ Model diagnostics summary:
 | M22 | Bayesian hierarchical IV shrinkage proxy | r2 | 0.966 | Shrinkage is useful for sparse strikes and floor-price artifacts. | implemented |
 | M23 | Delta-hedged residual AR(1) | mean_abs_residual_acf1 | 0.1484 | Residuals mean-revert; quote edges should be passive and spread-aware. | implemented |
 | M24 | Gamma-scalping PnL attribution | best_net_gamma_scalp | 29.18 | Long near-ATM gamma is the central historical hypothesis. | implemented |
-| M25 | No-arbitrage persistence survival proxy | mean_lifetime | 1.225 | Most flags are short-lived midpoint artifacts; persistence filter required. | implemented |
+| M25 | No-arbitrage persistence survival proxy | mean_lifetime | 1.257 | Most flags are short-lived midpoint artifacts; persistence filter required. | implemented |
 | M26 | Constrained cross-sectional option-pricing regression | mean_smile_r2 | 0.9896 | Fit constrained smiles before trading cross-strike discrepancies. | implemented |
 | M27 | Voucher fill-probability model | auc | 0.5359 | Fill probability needs more features, but depth/spread is a usable baseline. | implemented |
 | M28 | Avellaneda-Stoikov market-making proxy | spread_mean | 4.988 | Underlying can hedge options, but quote width must include adverse-selection and inventory. | implemented |

@@ -1632,6 +1632,440 @@ def section6_trade_analysis(prices: pd.DataFrame, trades: pd.DataFrame, opt_ctx:
     return results
 
 
+def section7_options_microstructure_surfaces(
+    prices: pd.DataFrame,
+    trades: pd.DataFrame,
+    vev_ctx: dict[str, Any],
+    opt_ctx: dict[str, pd.DataFrame],
+    out: OutputPaths,
+) -> dict[str, pd.DataFrame]:
+    """Operational option metrics used by market-making and inventory-control models."""
+    iv_df = opt_ctx.get("iv", pd.DataFrame()).copy()
+    greeks_ts = opt_ctx.get("greeks_ts", pd.DataFrame()).copy()
+    vev = vev_ctx["vev"].copy()
+    rv = vev_ctx["rv"].copy()
+
+    if iv_df.empty:
+        empty = pd.DataFrame()
+        for name in [
+            "options_surface_state.csv",
+            "options_svi_surface_params.csv",
+            "options_portfolio_greeks_timeseries.csv",
+            "options_inventory_skew_base_spread.csv",
+            "underlying_signed_flow_toxicity.csv",
+            "option_l1_obi_predictiveness.csv",
+            "trade_sign_autocorrelation.csv",
+        ]:
+            write_table(empty, out.tables / name)
+        return {}
+
+    spot_book = vev[
+        [
+            "day",
+            "timestamp",
+            "global_tick",
+            "mid_price",
+            "bid_price_1",
+            "ask_price_1",
+            "bid_volume_1",
+            "ask_volume_1",
+            "spread",
+        ]
+    ].rename(
+        columns={
+            "mid_price": "spot_mid_book",
+            "bid_price_1": "spot_bid_1",
+            "ask_price_1": "spot_ask_1",
+            "bid_volume_1": "spot_bid_volume_1",
+            "ask_volume_1": "spot_ask_volume_1",
+            "spread": "spot_spread",
+        }
+    )
+    option_book = pd.concat(
+        [add_global_tick(series_for(prices, product)).assign(voucher=product, strike=strike(product)) for product in VOUCHERS],
+        ignore_index=True,
+    )
+    surface = option_book.merge(
+        iv_df[["day", "timestamp", "global_tick", "voucher", "spot_mid", "option_mid", "tte_days", "iv"]],
+        on=["day", "timestamp", "global_tick", "voucher"],
+        how="left",
+    ).merge(
+        greeks_ts[["day", "timestamp", "voucher", "bs_delta", "bs_gamma", "bs_vega"]],
+        on=["day", "timestamp", "voucher"],
+        how="left",
+    ).merge(
+        spot_book,
+        on=["day", "timestamp", "global_tick"],
+        how="left",
+    ).merge(
+        rv[["day", "timestamp", "rv_500"]],
+        on=["day", "timestamp"],
+        how="left",
+    )
+    surface["option_spread"] = surface["ask_price_1"] - surface["bid_price_1"]
+    surface["l1_obi"] = (surface["bid_volume_1"] - surface["ask_volume_1"]) / (surface["bid_volume_1"] + surface["ask_volume_1"]).replace(0, np.nan)
+    surface["option_microprice"] = (
+        surface["ask_price_1"] * surface["bid_volume_1"] + surface["bid_price_1"] * surface["ask_volume_1"]
+    ) / (surface["bid_volume_1"] + surface["ask_volume_1"]).replace(0, np.nan)
+    surface["option_microprice_minus_mid"] = surface["option_microprice"] - surface["option_mid"]
+    surface["spot_l1_obi"] = (surface["spot_bid_volume_1"] - surface["spot_ask_volume_1"]) / (
+        surface["spot_bid_volume_1"] + surface["spot_ask_volume_1"]
+    ).replace(0, np.nan)
+    surface["spot_microprice"] = (
+        surface["spot_ask_1"] * surface["spot_bid_volume_1"] + surface["spot_bid_1"] * surface["spot_ask_volume_1"]
+    ) / (surface["spot_bid_volume_1"] + surface["spot_ask_volume_1"]).replace(0, np.nan)
+    surface["underlying_microprice_minus_mid"] = surface["spot_microprice"] - surface["spot_mid_book"]
+    surface["tte_years"] = surface["tte_days"] / 365.0
+    surface["log_moneyness"] = np.log(surface["strike"].astype(float) / surface["spot_mid"].astype(float))
+    surface["total_variance"] = surface["iv"] ** 2 * surface["tte_years"]
+    surface["theoretical_mid"] = [
+        bs_call_price(float(row.spot_mid), int(row.strike), float(row.tte_years), float(row.iv))
+        if np.isfinite([row.spot_mid, row.strike, row.tte_years, row.iv]).all() and row.iv > 0
+        else np.nan
+        for row in surface.itertuples(index=False)
+    ]
+    surface["fair_minus_mid"] = surface["theoretical_mid"] - surface["option_mid"]
+    surface["spot_half_spread"] = surface["spot_spread"] / 2.0
+    surface["delta_hedge_halfspread_cost"] = surface["bs_delta"].abs() * surface["spot_half_spread"]
+    per_tick_vol = surface["rv_500"] / math.sqrt(TICKS_PER_DAY * 365)
+    spot_std_10ticks = surface["spot_mid"].abs() * per_tick_vol * math.sqrt(10)
+    surface["gamma_gap_risk_10ticks"] = 0.5 * surface["bs_gamma"].abs() * (spot_std_10ticks**2)
+    surface["base_spread"] = surface["option_spread"] + 2.0 * surface["delta_hedge_halfspread_cost"] + 2.0 * surface["gamma_gap_risk_10ticks"]
+    surface["inventory_skew_q100"] = 100.0 * surface["gamma_gap_risk_10ticks"]
+    surface["reservation_price_if_long_100"] = surface["theoretical_mid"] - surface["inventory_skew_q100"]
+    surface["reservation_price_if_short_100"] = surface["theoretical_mid"] + surface["inventory_skew_q100"]
+
+    keep_cols = [
+        "day",
+        "timestamp",
+        "global_tick",
+        "voucher",
+        "strike",
+        "spot_mid",
+        "option_mid",
+        "bid_price_1",
+        "ask_price_1",
+        "option_spread",
+        "l1_obi",
+        "option_microprice",
+        "option_microprice_minus_mid",
+        "underlying_microprice_minus_mid",
+        "iv",
+        "total_variance",
+        "theoretical_mid",
+        "fair_minus_mid",
+        "bs_delta",
+        "bs_gamma",
+        "bs_vega",
+        "rv_500",
+        "delta_hedge_halfspread_cost",
+        "gamma_gap_risk_10ticks",
+        "inventory_skew_q100",
+        "base_spread",
+        "reservation_price_if_long_100",
+        "reservation_price_if_short_100",
+    ]
+    write_table(surface[keep_cols], out.tables / "options_surface_state.csv")
+
+    svi_rows: list[dict[str, Any]] = []
+    for (day, timestamp), group in surface.dropna(subset=["iv", "total_variance", "log_moneyness"]).groupby(["day", "timestamp"]):
+        good = group[np.isfinite(group["total_variance"]) & np.isfinite(group["log_moneyness"])]
+        if len(good) < 4 or good["log_moneyness"].nunique() < 4:
+            continue
+        try:
+            coeff2, coeff1, coeff0 = np.polyfit(good["log_moneyness"], good["total_variance"], 2)
+            pred = coeff2 * good["log_moneyness"] ** 2 + coeff1 * good["log_moneyness"] + coeff0
+            ss_res = float(((good["total_variance"] - pred) ** 2).sum())
+            ss_tot = float(((good["total_variance"] - good["total_variance"].mean()) ** 2).sum())
+            svi_rows.append(
+                {
+                    "day": int(day),
+                    "timestamp": int(timestamp),
+                    "global_tick": int(day) * 1_000_000 + int(timestamp),
+                    "n_strikes": int(len(good)),
+                    "atm_total_variance": float(coeff0),
+                    "svi_skew": float(coeff1),
+                    "svi_convexity": float(coeff2),
+                    "smile_r2": float(1.0 - ss_res / ss_tot) if ss_tot > 1e-18 else np.nan,
+                    "mean_iv": float(good["iv"].mean()),
+                    "min_iv": float(good["iv"].min()),
+                    "max_iv": float(good["iv"].max()),
+                }
+            )
+        except Exception:
+            continue
+    svi = pd.DataFrame(svi_rows)
+    write_table(svi, out.tables / "options_svi_surface_params.csv")
+
+    if not svi.empty:
+        fig, axes = plt.subplots(3, 1, figsize=(14, 9), sharex=True)
+        for day, group in svi.groupby("day"):
+            axes[0].plot(group["global_tick"], group["svi_skew"], lw=0.8, label=f"Day {day}")
+            axes[1].plot(group["global_tick"], group["svi_convexity"], lw=0.8, label=f"Day {day}")
+            axes[2].plot(group["global_tick"], group["smile_r2"], lw=0.8, label=f"Day {day}")
+        for ax in axes:
+            add_day_dividers(ax)
+            ax.legend(fontsize=7)
+        axes[0].set_title("SVI-Style Total-Variance Smile Parameters")
+        axes[0].set_ylabel("Skew")
+        axes[1].set_ylabel("Convexity")
+        axes[2].set_ylabel("R2")
+        axes[2].set_xlabel("Global tick")
+        save_fig(out.charts / "options_svi_skew_convexity_timeseries.png")
+
+    def surface_3d(z_col: str, path: Path, title: str, z_label: str) -> None:
+        pts = surface.dropna(subset=["global_tick", "strike", z_col]).copy()
+        if pts.empty:
+            return
+        step = max(1, len(pts) // 8000)
+        pts = pts.iloc[::step]
+        fig = plt.figure(figsize=(11, 7))
+        ax = fig.add_subplot(111, projection="3d")
+        sc = ax.scatter(pts["global_tick"], pts["strike"], pts[z_col], c=pts[z_col], s=5, cmap="viridis", alpha=0.75)
+        ax.set_title(title)
+        ax.set_xlabel("Global tick")
+        ax.set_ylabel("Strike")
+        ax.set_zlabel(z_label)
+        fig.colorbar(sc, shrink=0.6, pad=0.08)
+        save_fig(path)
+
+    surface_3d("iv", out.charts / "options_iv_surface_3d.png", "Option IV Surface Over Time", "IV")
+    surface_3d("total_variance", out.charts / "options_total_variance_surface_3d.png", "Option Total Variance Surface Over Time", "Total variance")
+    surface_3d("theoretical_mid", out.charts / "options_fair_value_surface_3d.png", "BS Fair Value Surface Over Time", "Fair value")
+    surface_3d("bs_gamma", out.charts / "options_gamma_surface_3d.png", "Option Gamma Surface Over Time", "Gamma")
+
+    portfolio_specs = {
+        "unit_long_all_vouchers": {voucher: 1.0 for voucher in VOUCHERS},
+        "limit_long_all_vouchers": {voucher: 300.0 for voucher in VOUCHERS},
+        "near_atm_gamma_100_each": {"VEV_5100": 100.0, "VEV_5200": 100.0, "VEV_5300": 100.0, "VEV_5400": 100.0, "VEV_5500": 100.0},
+        "strat4_observed_voucher_book": {"VEV_4000": 9.0, "VEV_4500": 9.0, "VEV_5000": 6.0},
+    }
+    portfolio_rows: list[dict[str, Any]] = []
+    greek_panel = surface.dropna(subset=["bs_delta", "bs_gamma", "bs_vega"]).copy()
+    for (day, timestamp, global_tick), group in greek_panel.groupby(["day", "timestamp", "global_tick"]):
+        g = group.set_index("voucher")
+        for name, weights in portfolio_specs.items():
+            total_delta = total_gamma = total_vega = 0.0
+            gross_voucher = 0.0
+            for voucher, qty in weights.items():
+                if voucher not in g.index:
+                    continue
+                row = g.loc[voucher]
+                if isinstance(row, pd.DataFrame):
+                    row = row.iloc[0]
+                total_delta += qty * float(row["bs_delta"])
+                total_gamma += qty * float(row["bs_gamma"])
+                total_vega += qty * float(row["bs_vega"])
+                gross_voucher += abs(qty)
+            hedge_qty = float(np.clip(-total_delta, -200.0, 200.0))
+            portfolio_rows.append(
+                {
+                    "day": int(day),
+                    "timestamp": int(timestamp),
+                    "global_tick": int(global_tick),
+                    "portfolio": name,
+                    "gross_voucher_position": gross_voucher,
+                    "net_delta": total_delta,
+                    "underlying_hedge_qty_clipped": hedge_qty,
+                    "delta_after_hedge_limit": total_delta + hedge_qty,
+                    "net_gamma": total_gamma,
+                    "net_vega": total_vega,
+                }
+            )
+    portfolio = pd.DataFrame(portfolio_rows)
+    write_table(portfolio, out.tables / "options_portfolio_greeks_timeseries.csv")
+    if not portfolio.empty:
+        fig, axes = plt.subplots(3, 1, figsize=(14, 9), sharex=True)
+        for name, group in portfolio.groupby("portfolio"):
+            if name in {"unit_long_all_vouchers", "near_atm_gamma_100_each", "strat4_observed_voucher_book"}:
+                axes[0].plot(group["global_tick"], group["net_delta"], lw=0.8, label=name)
+                axes[1].plot(group["global_tick"], group["net_gamma"], lw=0.8, label=name)
+                axes[2].plot(group["global_tick"], group["net_vega"], lw=0.8, label=name)
+        axes[0].set_title("Net Portfolio Greeks Over Time")
+        axes[0].set_ylabel("Delta")
+        axes[1].set_ylabel("Gamma")
+        axes[2].set_ylabel("Vega")
+        axes[2].set_xlabel("Global tick")
+        for ax in axes:
+            add_day_dividers(ax)
+            ax.legend(fontsize=7)
+        save_fig(out.charts / "options_portfolio_greeks_timeseries.png")
+
+    inv_cols = [
+        "day",
+        "timestamp",
+        "global_tick",
+        "voucher",
+        "strike",
+        "option_mid",
+        "theoretical_mid",
+        "option_spread",
+        "delta_hedge_halfspread_cost",
+        "gamma_gap_risk_10ticks",
+        "inventory_skew_q100",
+        "base_spread",
+        "reservation_price_if_long_100",
+        "reservation_price_if_short_100",
+    ]
+    inventory = surface[inv_cols].copy()
+    write_table(inventory, out.tables / "options_inventory_skew_base_spread.csv")
+    if not inventory.empty:
+        summary = inventory.groupby("voucher", as_index=False)[["option_spread", "base_spread", "inventory_skew_q100"]].median()
+        x = np.arange(len(summary))
+        width = 0.35
+        plt.figure(figsize=(12, 5))
+        plt.bar(x - width / 2, summary["option_spread"], width=width, label="Observed spread")
+        plt.bar(x + width / 2, summary["base_spread"], width=width, label="Risk-adjusted base spread")
+        plt.xticks(x, summary["voucher"], rotation=30)
+        plt.title("Median Observed Spread vs Risk-Adjusted Base Spread")
+        plt.ylabel("Price ticks")
+        plt.legend()
+        save_fig(out.charts / "options_base_spread_by_voucher.png")
+
+    option_pred_rows: list[dict[str, Any]] = []
+    pred_surface = surface.sort_values(["voucher", "day", "timestamp"]).copy()
+    for horizon_rows in [1, 10, 100]:
+        pred_surface[f"future_option_ret_{horizon_rows}"] = pred_surface.groupby(["voucher", "day"])["option_mid"].transform(
+            lambda x: forward_log_returns(x, horizon_rows)
+        )
+        pred_surface[f"future_iv_change_{horizon_rows}"] = pred_surface.groupby(["voucher", "day"])["iv"].transform(lambda x: x.shift(-horizon_rows) - x)
+    for voucher, group in pred_surface.groupby("voucher"):
+        for horizon_rows in [1, 10, 100]:
+            for target in [f"future_option_ret_{horizon_rows}", f"future_iv_change_{horizon_rows}"]:
+                clean = group[["l1_obi", "option_microprice_minus_mid", "underlying_microprice_minus_mid", target]].replace([np.inf, -np.inf], np.nan).dropna()
+                if len(clean) < 20:
+                    continue
+                coef, _, metrics = linear_fit(clean[["l1_obi", "option_microprice_minus_mid", "underlying_microprice_minus_mid"]], clean[target])
+                option_pred_rows.append(
+                    {
+                        "voucher": voucher,
+                        "horizon_rows": horizon_rows,
+                        "target": target,
+                        "n": int(metrics.get("n", len(clean))),
+                        "r2": float(metrics.get("r2", np.nan)),
+                        "obi_corr": safe_corr(clean["l1_obi"], clean[target]),
+                        "option_microprice_corr": safe_corr(clean["option_microprice_minus_mid"], clean[target]),
+                        "underlying_microprice_corr": safe_corr(clean["underlying_microprice_minus_mid"], clean[target]),
+                        "coef_l1_obi": float(coef[1]) if len(coef) > 1 else np.nan,
+                    }
+                )
+    option_obi = pd.DataFrame(option_pred_rows)
+    write_table(option_obi, out.tables / "option_l1_obi_predictiveness.csv")
+    if not option_obi.empty:
+        plot_df = option_obi[option_obi["target"].eq("future_option_ret_10")].copy()
+        if not plot_df.empty:
+            plt.figure(figsize=(12, 5))
+            plt.bar(plot_df["voucher"], plot_df["obi_corr"].abs())
+            plt.xticks(rotation=30)
+            plt.title("Option L1 OBI Absolute Correlation With Future 10-Row Option Return")
+            plt.ylabel("|correlation|")
+            save_fig(out.charts / "option_l1_obi_predictiveness.png")
+
+    def signed_trades_for(product: str) -> pd.DataFrame:
+        tr = trades[trades["symbol"].eq(product)].copy()
+        if tr.empty:
+            return pd.DataFrame()
+        book = prices[prices["product"].eq(product)][["day", "timestamp", "bid_price_1", "ask_price_1", "mid_price"]].copy()
+        signed = tr.merge(book, on=["day", "timestamp"], how="left")
+        signed["trade_sign"] = np.where(
+            signed["price"] >= signed["ask_price_1"],
+            1.0,
+            np.where(signed["price"] <= signed["bid_price_1"], -1.0, np.sign(signed["price"] - signed["mid_price"])),
+        )
+        signed.loc[signed["trade_sign"].eq(0), "trade_sign"] = np.nan
+        signed["signed_quantity"] = signed["trade_sign"] * signed["quantity"]
+        return signed
+
+    flow_rows: list[dict[str, Any]] = []
+    vt = signed_trades_for(UNDERLYING)
+    if not vt.empty:
+        vt["bucket_start"] = (vt["timestamp"] // 1000) * 1000
+        for (day, bucket), group in vt.groupby(["day", "bucket_start"]):
+            buy_qty = group.loc[group["trade_sign"].gt(0), "quantity"].sum()
+            sell_qty = group.loc[group["trade_sign"].lt(0), "quantity"].sum()
+            total_qty = buy_qty + sell_qty
+            start = vev[(vev["day"].eq(day)) & (vev["timestamp"].eq(bucket))]
+            for horizon in [100, 500, 1000, 5000]:
+                end = vev[(vev["day"].eq(day)) & (vev["timestamp"].eq(bucket + horizon))]
+                fwd_ret = float(np.log(end.iloc[0]["mid_price"]) - np.log(start.iloc[0]["mid_price"])) if len(start) and len(end) else np.nan
+                flow_rows.append(
+                    {
+                        "day": int(day),
+                        "bucket_start": int(bucket),
+                        "horizon_timestamp": horizon,
+                        "trade_count": int(len(group)),
+                        "buy_qty": float(buy_qty),
+                        "sell_qty": float(sell_qty),
+                        "signed_volume_imbalance": float((buy_qty - sell_qty) / total_qty) if total_qty else np.nan,
+                        "signed_quantity": float(group["signed_quantity"].sum()),
+                        "future_underlying_return": fwd_ret,
+                    }
+                )
+    flow = pd.DataFrame(flow_rows)
+    write_table(flow, out.tables / "underlying_signed_flow_toxicity.csv")
+    if not flow.empty:
+        summary_rows = []
+        for horizon, group in flow.groupby("horizon_timestamp"):
+            summary_rows.append(
+                {
+                    "horizon_timestamp": int(horizon),
+                    "n": int(group[["signed_volume_imbalance", "future_underlying_return"]].dropna().shape[0]),
+                    "corr_signed_imbalance_future_return": safe_corr(group["signed_volume_imbalance"], group["future_underlying_return"]),
+                    "mean_future_return_when_buy_imbalanced": float(group[group["signed_volume_imbalance"].gt(0)]["future_underlying_return"].mean()),
+                    "mean_future_return_when_sell_imbalanced": float(group[group["signed_volume_imbalance"].lt(0)]["future_underlying_return"].mean()),
+                }
+            )
+        flow_summary = pd.DataFrame(summary_rows)
+        write_table(flow_summary, out.tables / "underlying_signed_flow_toxicity_summary.csv")
+        plt.figure(figsize=(8, 5))
+        plt.bar(flow_summary["horizon_timestamp"].astype(str), flow_summary["corr_signed_imbalance_future_return"])
+        plt.axhline(0, color="black", lw=0.8)
+        plt.title("Underlying Signed Flow Imbalance vs Future Return")
+        plt.xlabel("Horizon timestamp")
+        plt.ylabel("Correlation")
+        save_fig(out.charts / "underlying_signed_flow_toxicity.png")
+
+    acf_rows: list[dict[str, Any]] = []
+    for product in PRODUCTS:
+        signed = signed_trades_for(product).sort_values(["day", "timestamp"]).dropna(subset=["trade_sign"])
+        for day, group in signed.groupby("day"):
+            signs = group["trade_sign"].astype(float)
+            for lag in range(1, 21):
+                acf_rows.append(
+                    {
+                        "product": product,
+                        "day": int(day),
+                        "lag": lag,
+                        "trade_count": int(len(signs)),
+                        "trade_sign_autocorr": float(signs.autocorr(lag)) if len(signs) > lag + 2 else np.nan,
+                    }
+                )
+    sign_acf = pd.DataFrame(acf_rows)
+    write_table(sign_acf, out.tables / "trade_sign_autocorrelation.csv")
+    if not sign_acf.empty:
+        plot_acf = sign_acf.groupby(["product", "lag"], as_index=False)["trade_sign_autocorr"].mean()
+        active_products = plot_acf[plot_acf["product"].isin([UNDERLYING, "VEV_4000", "VEV_4500", "VEV_5000", "VEV_5200", "VEV_5300"])]
+        plt.figure(figsize=(12, 5))
+        for product, group in active_products.groupby("product"):
+            plt.plot(group["lag"], group["trade_sign_autocorr"], marker="o", ms=3, lw=0.8, label=product)
+        plt.axhline(0, color="black", lw=0.8)
+        plt.title("Trade Sign Autocorrelation by Product")
+        plt.xlabel("Trade lag")
+        plt.ylabel("Autocorrelation")
+        plt.legend(fontsize=7, ncol=2)
+        save_fig(out.charts / "trade_sign_autocorrelation.png")
+
+    return {
+        "surface": surface,
+        "svi": svi,
+        "portfolio": portfolio,
+        "inventory": inventory,
+        "option_obi": option_obi,
+        "flow": flow,
+        "trade_sign_acf": sign_acf,
+    }
+
+
 def section8_research_and_models(
     prices: pd.DataFrame,
     trades: pd.DataFrame,
@@ -3374,32 +3808,35 @@ def main() -> None:
     args = parse_args()
     out = ensure_output(args.output_dir, clean=not args.no_clean)
 
-    print("[Section 1/9] Loading data and checking integrity...")
+    print("[Section 1/10] Loading data and checking integrity...")
     prices, trades, hydrogel_present = load_data(args.data_dir)
     integrity, anomalies = section1_data_integrity(prices, trades, out)
 
-    print("[Section 2/9] Running Velvetfruit individual EDA...")
+    print("[Section 2/10] Running Velvetfruit individual EDA...")
     vev_ctx = section2_vev(prices, trades, out)
 
-    print("[Section 3/9] Running voucher individual EDA...")
+    print("[Section 3/10] Running voucher individual EDA...")
     voucher_ctx = section3_vouchers(prices, trades, vev_ctx["vev"], out)
 
-    print("[Section 4/9] Running options cross-voucher analysis...")
+    print("[Section 4/10] Running options cross-voucher analysis...")
     opt_ctx = section4_options(prices, vev_ctx, out)
 
-    print("[Section 5/9] Running lead-lag analysis...")
+    print("[Section 5/10] Running lead-lag analysis...")
     leadlag = section5_leadlag(prices, opt_ctx, out)
 
-    print("[Section 6/9] Running voucher trade vs fair value analysis...")
+    print("[Section 6/10] Running voucher trade vs fair value analysis...")
     trade_ctx = section6_trade_analysis(prices, trades, opt_ctx, out)
 
-    print("[Section 7/9] Running bot pattern analysis...")
+    print("[Section 7/10] Running advanced option microstructure and surface metrics...")
+    section7_options_microstructure_surfaces(prices, trades, vev_ctx, opt_ctx, out)
+
+    print("[Section 8/10] Running bot pattern analysis...")
     bot_ctx = section7_bot_patterns(prices, trades, out)
 
-    print("[Section 8/9] Answering research questions and running model diagnostics...")
+    print("[Section 9/10] Answering research questions and running model diagnostics...")
     research_ctx = section8_research_and_models(prices, trades, vev_ctx, voucher_ctx, opt_ctx, leadlag, trade_ctx, bot_ctx, out)
 
-    print("[Section 9/9] Writing plain-English report...")
+    print("[Section 10/10] Writing plain-English report...")
     build_report(out, hydrogel_present, integrity, anomalies, vev_ctx, voucher_ctx, opt_ctx, leadlag, bot_ctx)
     cleanup_duplicate_output_artifacts(out)
     print(f"Done. Outputs written to {out.root}")
