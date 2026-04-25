@@ -1,0 +1,41 @@
+{
+  "bounds": {
+    "kalman_sigma": [
+      1.70625,
+      3.54375
+    ],
+    "ofi_ask_threshold": [
+      1.0791300750445094,
+      2.2412701558616734
+    ],
+    "ofi_bid_threshold": [
+      1.0759652070084522,
+      2.23469696840217
+    ],
+    "wilmott_band_multiplier": [
+      0.5,
+      2.5
+    ]
+  },
+  "gp_iterations": 80,
+  "objective": "maximize_out_of_sample_calmar_ratio",
+  "oos_metrics": {
+    "calmar": 202.7777777777778,
+    "max_drawdown": 0.0,
+    "mean_pnl": 5.555555555555556e-05,
+    "n": 9000,
+    "sharpe": 1.0540925533894596,
+    "total_pnl": 0.5
+  },
+  "optimal_hyperparams": {
+    "kalman_sigma": 2.876795780029581,
+    "ofi_ask_threshold": 2.142261969792428,
+    "ofi_bid_threshold": 2.1672551633716948,
+    "wilmott_band_multiplier": 1.557278814200389
+  },
+  "walk_forward": {
+    "oos": 0.3,
+    "train": 0.5,
+    "validation": 0.2
+  }
+}

@@ -269,22 +269,25 @@ def bs_greeks(s: float, k: float, t: float, sigma: float, r: float = RISK_FREE_R
     return {"delta": float(delta), "gamma": float(gamma), "vega": float(vega), "theta": float(theta)}
 
 
-def bs_greeks_vec(s_arr: np.ndarray, k: float, t: float, sigma_arr: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Vectorized BS delta, gamma, and vega per 1 vol point for fixed k and t."""
+def bs_greeks_vec(s_arr: np.ndarray, k: float, t: float, sigma_arr: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Vectorized BS delta, gamma, vega per 1 vol point, and theta per day."""
     delta = np.full_like(s_arr, np.nan, dtype=float)
     gamma = np.full_like(s_arr, np.nan, dtype=float)
     vega = np.full_like(s_arr, np.nan, dtype=float)
+    theta = np.full_like(s_arr, np.nan, dtype=float)
     valid = np.isfinite(s_arr) & np.isfinite(sigma_arr) & (s_arr > 0) & (sigma_arr > 0) & (t > 0) & (k > 0)
     if not valid.any():
-        return delta, gamma, vega
+        return delta, gamma, vega, theta
     s = s_arr[valid]
     sig = sigma_arr[valid]
     vol_sqrt = sig * np.sqrt(t)
     d1 = (np.log(s / k) + 0.5 * sig**2 * t) / vol_sqrt
+    d2 = d1 - vol_sqrt
     delta[valid] = norm.cdf(d1)
     gamma[valid] = norm.pdf(d1) / (s * vol_sqrt)
     vega[valid] = s * norm.pdf(d1) * np.sqrt(t) / 100.0
-    return delta, gamma, vega
+    theta[valid] = (-(s * norm.pdf(d1) * sig) / (2 * np.sqrt(t)) - RISK_FREE_RATE * k * np.exp(-RISK_FREE_RATE * t) * norm.cdf(d2)) / 365.0
+    return delta, gamma, vega, theta
 
 
 def implied_vol(s: float, k: float, t: float, c: float) -> tuple[float, str]:
@@ -1015,6 +1018,146 @@ def section4_options(prices: pd.DataFrame, vev_ctx: dict[str, Any], out: OutputP
     iv_df = pd.DataFrame(iv_rows)
     write_table(iv_df, out.tables / "voucher_iv_timeseries.csv")
 
+    status_counts = iv_df.pivot_table(index="voucher", columns="iv_status", values="timestamp", aggfunc="count", fill_value=0)
+    iv_summary = iv_df.groupby("voucher").agg(
+        strike=("strike", "first"),
+        rows=("iv", "size"),
+        valid_iv_count=("iv", "count"),
+        mean_iv=("iv", "mean"),
+        median_iv=("iv", "median"),
+        std_iv=("iv", "std"),
+        min_iv=("iv", "min"),
+        p05_iv=("iv", lambda x: x.quantile(0.05)),
+        p95_iv=("iv", lambda x: x.quantile(0.95)),
+        max_iv=("iv", "max"),
+        mean_option_mid=("option_mid", "mean"),
+        mean_spot_mid=("spot_mid", "mean"),
+    )
+    day_iv_summary = iv_df.groupby(["voucher", "day"])["iv"].mean().unstack("day").rename(columns=lambda d: f"mean_iv_day{d}")
+    iv_summary = iv_summary.join(day_iv_summary, how="left").join(status_counts, how="left").reset_index()
+    iv_summary["valid_iv_fraction"] = iv_summary["valid_iv_count"] / iv_summary["rows"].replace(0, np.nan)
+    write_table(iv_summary, out.tables / "voucher_iv_contract_summary.csv")
+    if not iv_summary.empty:
+        plt.figure(figsize=(11, 5))
+        x = np.arange(len(iv_summary))
+        plt.bar(x, iv_summary["mean_iv"], color="steelblue", alpha=0.85)
+        err_low = (iv_summary["mean_iv"] - iv_summary["p05_iv"]).clip(lower=0)
+        err_high = (iv_summary["p95_iv"] - iv_summary["mean_iv"]).clip(lower=0)
+        plt.errorbar(x, iv_summary["mean_iv"], yerr=[err_low, err_high], fmt="none", ecolor="black", capsize=3, lw=0.8)
+        plt.xticks(x, iv_summary["voucher"], rotation=30)
+        plt.title("Per-Contract Implied Volatility: Mean with 5th-95th Percentile Range")
+        plt.ylabel("Implied volatility")
+        save_fig(out.charts / "voucher_iv_summary_by_contract.png")
+
+    def fit_iv_linear_model(train: pd.DataFrame, test: pd.DataFrame, features: list[str]) -> tuple[pd.Series, dict[str, float], str]:
+        clean_train = train[features + ["iv"]].replace([np.inf, -np.inf], np.nan).dropna()
+        clean_test = test[features + ["iv"]].replace([np.inf, -np.inf], np.nan).dropna()
+        pred = pd.Series(np.nan, index=test.index, dtype=float)
+        if len(clean_train) < len(features) + 2 or clean_test.empty:
+            return pred, regression_metrics([], []), ""
+        mu = clean_train[features].mean()
+        sigma = clean_train[features].std().replace(0, 1.0).fillna(1.0)
+        x_train = np.column_stack([np.ones(len(clean_train)), ((clean_train[features] - mu) / sigma).to_numpy(dtype=float)])
+        coef, *_ = np.linalg.lstsq(x_train, clean_train["iv"].to_numpy(dtype=float), rcond=None)
+        x_test = np.column_stack([np.ones(len(clean_test)), ((clean_test[features] - mu) / sigma).to_numpy(dtype=float)])
+        pred.loc[clean_test.index] = x_test @ coef
+        key_params = json.dumps({name: float(value) for name, value in zip(["intercept"] + features, coef)})
+        return pred, regression_metrics(test["iv"], pred, len(coef)), key_params
+
+    model_rows: list[dict[str, Any]] = []
+    for product, product_iv in iv_df.sort_values(["voucher", "day", "timestamp"]).groupby("voucher"):
+        valid = product_iv.dropna(subset=["iv"]).copy()
+        if len(valid) < 50:
+            model_rows.append(
+                {
+                    "voucher": product,
+                    "model_name": "insufficient_valid_iv",
+                    "sample_n": int(len(valid)),
+                    "train_n": 0,
+                    "test_n": 0,
+                    "test_rmse": np.nan,
+                    "test_mae": np.nan,
+                    "test_r2": np.nan,
+                    "test_aic": np.nan,
+                    "test_bic": np.nan,
+                    "key_params": "",
+                }
+            )
+            continue
+        valid["log_moneyness"] = np.log(valid["spot_mid"].astype(float) / valid["strike"].astype(float))
+        valid["log_moneyness_sq"] = valid["log_moneyness"] ** 2
+        valid["tte_years"] = valid["tte_days"] / 365.0
+        valid["global_tick_norm"] = valid["global_tick"] / 1_000_000.0
+        valid["spot_ret_1"] = valid.groupby("day")["spot_mid"].transform(lambda x: log_returns(x, 1))
+        valid["iv_lag1"] = valid.groupby("day")["iv"].shift(1)
+        valid["iv_ewma_200"] = valid.groupby("day")["iv"].transform(lambda x: x.ewm(span=200, min_periods=1, adjust=False).mean().shift(1))
+        valid["iv_ewma_1000"] = valid.groupby("day")["iv"].transform(lambda x: x.ewm(span=1000, min_periods=1, adjust=False).mean().shift(1))
+        split_idx = int(len(valid) * 0.7)
+        split_idx = min(max(split_idx, 20), len(valid) - 10)
+        train = valid.iloc[:split_idx].copy()
+        test = valid.iloc[split_idx:].copy()
+        train_mean = float(train["iv"].mean())
+
+        candidate_preds: list[tuple[str, pd.Series, dict[str, float], str, int]] = []
+        mean_pred = pd.Series(train_mean, index=test.index, dtype=float)
+        candidate_preds.append(("constant_mean", mean_pred, regression_metrics(test["iv"], mean_pred, 1), json.dumps({"train_mean_iv": train_mean}), 1))
+
+        day_means = train.groupby("day")["iv"].mean()
+        day_pred = test["day"].map(day_means).fillna(train_mean)
+        candidate_preds.append(("day_mean", day_pred, regression_metrics(test["iv"], day_pred, len(day_means)), json.dumps({f"day_{int(k)}": float(v) for k, v in day_means.items()}), max(1, len(day_means))))
+
+        linear_specs = [
+            ("linear_time", ["global_tick_norm"]),
+            ("linear_moneyness_tte", ["log_moneyness", "tte_years"]),
+            ("quadratic_moneyness_tte", ["log_moneyness", "log_moneyness_sq", "tte_years"]),
+            ("ar1_iv", ["iv_lag1"]),
+            ("ar1_spot_moneyness", ["iv_lag1", "spot_ret_1", "log_moneyness", "tte_years"]),
+        ]
+        for model_name, features in linear_specs:
+            pred, met, params = fit_iv_linear_model(train, test, features)
+            candidate_preds.append((model_name, pred, met, params, len(features) + 1))
+
+        for model_name, pred_col in [("ewma_span_200", "iv_ewma_200"), ("ewma_span_1000", "iv_ewma_1000")]:
+            pred = test[pred_col].copy()
+            candidate_preds.append((model_name, pred, regression_metrics(test["iv"], pred, 1), json.dumps({"span": int(model_name.rsplit("_", 1)[1])}), 1))
+
+        for model_name, pred, met, params, k_params in candidate_preds:
+            model_rows.append(
+                {
+                    "voucher": product,
+                    "model_name": model_name,
+                    "sample_n": int(len(valid)),
+                    "train_n": int(len(train)),
+                    "test_n": int(met.get("n", 0)),
+                    "test_rmse": float(met.get("rmse", np.nan)),
+                    "test_mae": float(met.get("mae", np.nan)),
+                    "test_r2": float(met.get("r2", np.nan)),
+                    "test_aic": float(met.get("aic", np.nan)),
+                    "test_bic": float(met.get("bic", np.nan)),
+                    "k_params": int(k_params),
+                    "key_params": params,
+                }
+            )
+    iv_model_comparison = pd.DataFrame(model_rows)
+    write_table(iv_model_comparison, out.tables / "voucher_iv_model_comparison.csv")
+    if not iv_model_comparison.empty:
+        best_models = (
+            iv_model_comparison.dropna(subset=["test_rmse"])
+            .sort_values(["voucher", "test_rmse", "test_mae", "test_bic"])
+            .groupby("voucher", as_index=False)
+            .first()
+        )
+        write_table(best_models, out.tables / "voucher_iv_best_models.csv")
+        if not best_models.empty:
+            plt.figure(figsize=(12, 5))
+            plt.bar(best_models["voucher"], best_models["test_rmse"])
+            for idx, row in best_models.reset_index(drop=True).iterrows():
+                plt.text(idx, row["test_rmse"], row["model_name"], rotation=90, va="bottom", ha="center", fontsize=7)
+            plt.xticks(rotation=30)
+            plt.title("Best Out-of-Sample IV Model Per Contract")
+            plt.ylabel("Test RMSE")
+            save_fig(out.charts / "voucher_iv_best_model_rmse.png")
+
     for day in [0, 1, 2]:
         day_iv = iv_df[iv_df["day"] == day]
         sample_ts = np.linspace(day_iv["timestamp"].min(), day_iv["timestamp"].max(), 5).round(-2).astype(int)
@@ -1247,16 +1390,26 @@ def section4_options(prices: pd.DataFrame, vev_ctx: dict[str, Any], out: OutputP
             if pd_day.empty:
                 continue
             t_years = TTE_DAYS[day] / 365.0
-            delta_arr, gamma_arr, vega_arr = bs_greeks_vec(
+            delta_arr, gamma_arr, vega_arr, theta_arr = bs_greeks_vec(
                 pd_day["spot_mid"].values.astype(float), k, t_years, pd_day["iv"].values.astype(float)
             )
             pd_day["bs_delta"] = delta_arr
             pd_day["bs_gamma"] = gamma_arr
             pd_day["bs_vega"] = vega_arr
-            greeks_ts_frames.append(pd_day[["day", "timestamp", "global_tick", "voucher", "strike", "spot_mid", "iv", "bs_delta", "bs_gamma", "bs_vega"]])
+            pd_day["bs_theta"] = theta_arr
+            greeks_ts_frames.append(pd_day[["day", "timestamp", "global_tick", "voucher", "strike", "spot_mid", "iv", "bs_delta", "bs_gamma", "bs_vega", "bs_theta"]])
     greeks_ts = pd.concat(greeks_ts_frames, ignore_index=True) if greeks_ts_frames else pd.DataFrame()
     if not greeks_ts.empty:
         write_table(greeks_ts, out.tables / "voucher_greeks_timeseries.csv")
+        greek_summary = flatten_columns(
+            greeks_ts.groupby("voucher")[["bs_delta", "bs_gamma", "bs_vega", "bs_theta"]].agg(["count", "mean", "median", "std", "min", "max"])
+        ).reset_index()
+        write_table(greek_summary, out.tables / "voucher_greeks_summary.csv")
+        greek_day_summary = flatten_columns(
+            greeks_ts.groupby(["voucher", "day"])[["bs_delta", "bs_gamma", "bs_vega", "bs_theta"]].agg(["count", "mean", "median", "std", "min", "max"])
+        ).reset_index()
+        write_table(greek_day_summary, out.tables / "voucher_greeks_by_day_summary.csv")
+
         fig, axes = plt.subplots(2, 1, figsize=(14, 8), sharex=True)
         for product in VOUCHERS:
             sub = greeks_ts[greeks_ts["voucher"] == product]
@@ -1269,6 +1422,20 @@ def section4_options(prices: pd.DataFrame, vev_ctx: dict[str, Any], out: OutputP
         axes[1].set_ylabel("Gamma")
         axes[1].set_xlabel("Global tick")
         save_fig(out.charts / "voucher_delta_gamma_timeseries.png")
+
+        fig, axes = plt.subplots(4, 1, figsize=(14, 11), sharex=True)
+        greek_cols = [("bs_delta", "Delta"), ("bs_gamma", "Gamma"), ("bs_vega", "Vega"), ("bs_theta", "Theta")]
+        for product in VOUCHERS:
+            sub = greeks_ts[greeks_ts["voucher"] == product]
+            for ax, (col, _) in zip(axes, greek_cols):
+                ax.plot(sub["global_tick"], sub[col], lw=0.6, label=product)
+        for ax, (_, label) in zip(axes, greek_cols):
+            add_day_dividers(ax)
+            ax.set_ylabel(label)
+        axes[0].set_title("Black-Scholes Greeks Over Time By Voucher")
+        axes[0].legend(ncol=3, fontsize=7)
+        axes[-1].set_xlabel("Global tick")
+        save_fig(out.charts / "voucher_greeks_timeseries_all.png")
 
     # --- NEW: Gamma scalping P&L proxy (dS² accumulation minus theta cost) ---
     if not greeks_ts.empty:
@@ -1690,7 +1857,7 @@ def section7_options_microstructure_surfaces(
         on=["day", "timestamp", "global_tick", "voucher"],
         how="left",
     ).merge(
-        greeks_ts[["day", "timestamp", "voucher", "bs_delta", "bs_gamma", "bs_vega"]],
+        greeks_ts[["day", "timestamp", "voucher", "bs_delta", "bs_gamma", "bs_vega", "bs_theta"]],
         on=["day", "timestamp", "voucher"],
         how="left",
     ).merge(
@@ -1757,6 +1924,7 @@ def section7_options_microstructure_surfaces(
         "bs_delta",
         "bs_gamma",
         "bs_vega",
+        "bs_theta",
         "rv_500",
         "delta_hedge_halfspread_cost",
         "gamma_gap_risk_10ticks",
@@ -1841,11 +2009,11 @@ def section7_options_microstructure_surfaces(
         "strat4_observed_voucher_book": {"VEV_4000": 9.0, "VEV_4500": 9.0, "VEV_5000": 6.0},
     }
     portfolio_rows: list[dict[str, Any]] = []
-    greek_panel = surface.dropna(subset=["bs_delta", "bs_gamma", "bs_vega"]).copy()
+    greek_panel = surface.dropna(subset=["bs_delta", "bs_gamma", "bs_vega", "bs_theta"]).copy()
     for (day, timestamp, global_tick), group in greek_panel.groupby(["day", "timestamp", "global_tick"]):
         g = group.set_index("voucher")
         for name, weights in portfolio_specs.items():
-            total_delta = total_gamma = total_vega = 0.0
+            total_delta = total_gamma = total_vega = total_theta = 0.0
             gross_voucher = 0.0
             for voucher, qty in weights.items():
                 if voucher not in g.index:
@@ -1856,6 +2024,7 @@ def section7_options_microstructure_surfaces(
                 total_delta += qty * float(row["bs_delta"])
                 total_gamma += qty * float(row["bs_gamma"])
                 total_vega += qty * float(row["bs_vega"])
+                total_theta += qty * float(row["bs_theta"])
                 gross_voucher += abs(qty)
             hedge_qty = float(np.clip(-total_delta, -200.0, 200.0))
             portfolio_rows.append(
@@ -1870,22 +2039,25 @@ def section7_options_microstructure_surfaces(
                     "delta_after_hedge_limit": total_delta + hedge_qty,
                     "net_gamma": total_gamma,
                     "net_vega": total_vega,
+                    "net_theta": total_theta,
                 }
             )
     portfolio = pd.DataFrame(portfolio_rows)
     write_table(portfolio, out.tables / "options_portfolio_greeks_timeseries.csv")
     if not portfolio.empty:
-        fig, axes = plt.subplots(3, 1, figsize=(14, 9), sharex=True)
+        fig, axes = plt.subplots(4, 1, figsize=(14, 11), sharex=True)
         for name, group in portfolio.groupby("portfolio"):
             if name in {"unit_long_all_vouchers", "near_atm_gamma_100_each", "strat4_observed_voucher_book"}:
                 axes[0].plot(group["global_tick"], group["net_delta"], lw=0.8, label=name)
                 axes[1].plot(group["global_tick"], group["net_gamma"], lw=0.8, label=name)
                 axes[2].plot(group["global_tick"], group["net_vega"], lw=0.8, label=name)
+                axes[3].plot(group["global_tick"], group["net_theta"], lw=0.8, label=name)
         axes[0].set_title("Net Portfolio Greeks Over Time")
         axes[0].set_ylabel("Delta")
         axes[1].set_ylabel("Gamma")
         axes[2].set_ylabel("Vega")
-        axes[2].set_xlabel("Global tick")
+        axes[3].set_ylabel("Theta")
+        axes[3].set_xlabel("Global tick")
         for ax in axes:
             add_day_dividers(ax)
             ax.legend(fontsize=7)
@@ -2831,7 +3003,7 @@ def section8_research_and_models(
             filt_delta = np.full(len(group), np.nan)
             for day, day_group in group.groupby("day"):
                 idx = day_group.index
-                d_arr, _, _ = bs_greeks_vec(day_group["kalman_fair"].to_numpy(dtype=float), k, TTE_DAYS[int(day)] / 365.0, day_group["iv"].to_numpy(dtype=float))
+                d_arr, _, _, _ = bs_greeks_vec(day_group["kalman_fair"].to_numpy(dtype=float), k, TTE_DAYS[int(day)] / 365.0, day_group["iv"].to_numpy(dtype=float))
                 filt_delta[group.index.get_indexer(idx)] = d_arr
             delta_rows.append({
                 "voucher": product,
@@ -2852,7 +3024,7 @@ def section8_research_and_models(
             g = group.copy()
             g["filtered_delta"] = np.nan
             for day, dg in g.groupby("day"):
-                d_arr, _, _ = bs_greeks_vec(dg["kalman_fair"].to_numpy(dtype=float), k, TTE_DAYS[int(day)] / 365.0, dg["iv"].to_numpy(dtype=float))
+                d_arr, _, _, _ = bs_greeks_vec(dg["kalman_fair"].to_numpy(dtype=float), k, TTE_DAYS[int(day)] / 365.0, dg["iv"].to_numpy(dtype=float))
                 g.loc[dg.index, "filtered_delta"] = d_arr
             filtered_delta_frames.append(g[["voucher", "day", "timestamp", "filtered_delta"]])
         filtered_delta_ts = pd.concat(filtered_delta_frames, ignore_index=True)
@@ -2912,7 +3084,7 @@ def section8_research_and_models(
         for product, group in fitted_iv_df.groupby("voucher"):
             k = strike(product)
             for day, dg in group.groupby("day"):
-                d_arr, _, _ = bs_greeks_vec(dg["spot_mid"].to_numpy(dtype=float), k, TTE_DAYS[int(day)] / 365.0, dg["fitted_iv"].to_numpy(dtype=float))
+                d_arr, _, _, _ = bs_greeks_vec(dg["spot_mid"].to_numpy(dtype=float), k, TTE_DAYS[int(day)] / 365.0, dg["fitted_iv"].to_numpy(dtype=float))
                 out_g = dg[["voucher", "day", "timestamp"]].copy()
                 out_g["fitted_delta"] = d_arr
                 fitted_greeks.append(out_g)
