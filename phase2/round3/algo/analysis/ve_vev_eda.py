@@ -3,7 +3,7 @@
 Round 3 EDA for VELVETFRUIT_EXTRACT and VEV vouchers.
 
 Run from repo root:
-    python phase2/round3/algo/ve_vev_eda.py
+    python phase2/round3/algo/analysis/ve_vev_eda.py
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-_mpl_config = Path(__file__).resolve().parent / "analysis" / ".mplconfig"
+_mpl_config = Path(__file__).resolve().parent / ".mplconfig"
 _mpl_config.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("MPLCONFIGDIR", str(_mpl_config))
 
@@ -34,8 +34,8 @@ from statsmodels.tsa.stattools import acf as compute_acf_vals, adfuller, kpss
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DATA_DIR = SCRIPT_DIR / "data"
-OUTPUT_DIR = SCRIPT_DIR / "analysis" / "ve_vev_eda_output"
+DATA_DIR = SCRIPT_DIR.parent / "data"
+OUTPUT_DIR = SCRIPT_DIR / "ve_vev_eda_output"
 
 UNDERLYING = "VELVETFRUIT_EXTRACT"
 UNDERLYING_LABEL = "Velvetfruit"

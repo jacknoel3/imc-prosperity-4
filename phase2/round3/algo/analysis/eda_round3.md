@@ -32,7 +32,7 @@
 - Imbalance signal: corr(OBI, fwd_ret_1) = -0.321 → contrarian. Bucketed: most-negative OBI quintile → +0.29 avg fwd ret; most-positive → -0.22.
 - Intraday pattern: noisy but broadly stable. No monotonic ramp — day 1 shows some upside (5240→5262), day 2 similar (5262→5277), but non-monotonic. Not a clean linear trend. Treat as stationary for BS pricing.
 - Book depth at best: bid ~37.8 units, ask ~37.8 units. Deepest book in dataset — 3× deeper than HGP.
-- Realized volatility: **34.2% annualized** (consistent across all three days: 33.9%, 34.3%, 34.4%). Use as BS input σ.
+- Realized volatility: **40.8% / 41.3% / 41.4%** using the generated EDA's calendar-day annualization (`TTE_days / 365`). The older **34.2%** figure is a trading-day annualization and should not be mixed with `T / 365` Black-Scholes pricing.
 - Trade execution: 1,372 trades over 3 days (~457/day), avg qty 6.0, median 6, inter-trade interval ~726 ticks. Buyer/seller fields empty.
 - Recommended strategy: (1) Standalone passive MM around FV=5,250 with contrarian OBI tilt. (2) Delta hedge vehicle for VEV voucher positions — short 0.20 VEV per VEV_5400 long.
 - Recommended position sizing: Limit = 200. Size conservatively — deep book means bots are active.
@@ -42,21 +42,22 @@
 
 ## Findings: VEV Vouchers — Vol Surface Summary
 
-**Parameters**: S = VEV day-average mid (~5,250), r = 0, σ = 34.2% realized annualized.
-**TTE used**: 4.5d / 3.5d / 2.5d for days 0 / 1 / 2 respectively.
+**Parameters**: S = VEV day-average mid (~5,250), r = 0, historical raw RV ≈ 41% using calendar-day annualization.
+**Historical TTE used**: 8d / 7d / 6d for days 0 / 1 / 2 respectively.
+**Live trading TTE assumption**: 5d. This is an extrapolation below the historical minimum TTE, so short-dated OTM/floor-voucher conclusions should be treated conservatively.
 
-| Strike | Moneyness | Mean IV | IV vs RV gap | Avg mkt−BS diff | Spread | Classification |
-|--------|-----------|---------|--------------|-----------------|--------|----------------|
-| 4000 | 1.31 (deep ITM) | 77.4% | +43.2% | — | — | Skip — delta≈1 |
-| 4500 | 1.17 (ITM) | 45.7% | +11.5% | — | — | Skip — delta≈1 |
-| 5000 | 1.05 (ITM) | 33.6% | -0.6% | -0.9 | 6.0 | Passive MM |
-| 5100 | 1.03 (ITM) | 33.2% | -1.0% | -1.2 | — | Passive MM |
-| 5200 | 1.01 (ATM) | 33.6% | -0.6% | -1.8 | 2.9 | Passive MM |
-| 5300 | 0.99 (ATM) | 33.9% | -0.3% | -1.1 | 2.1 | Passive MM |
-| 5400 | 0.97 (OTM) | 31.8% | -2.4% | **-3.8** | 1.4 | **BUY — top trade** |
-| 5500 | 0.95 (OTM) | 34.5% | +0.3% | +0.2 | — | Passive MM |
-| 6000 | 0.87 (deep OTM) | 54.6%* | +20.4% | pinned | 1.0 | **SELL at ask=1** |
-| 6500 | 0.81 (deep OTM) | 82.7%* | +48.5% | pinned | 1.0 | **SELL at ask=1** |
+| Strike | Moneyness | Historical liquidity / pricing note | Spread | Classification |
+|--------|-----------|--------------------------------------|--------|----------------|
+| 4000 | 1.31 (deep ITM) | Functionally delta-1 exposure; extra spread cost versus Velvetfruit. | ~21 | Skip |
+| 4500 | 1.17 (ITM) | Functionally delta-1 and almost no prints. | ~16 | Skip |
+| 5000 | 1.05 (ITM) | One observed trade; pricing is hard to validate after spread. | ~6.0 | Passive only |
+| 5100 | 1.03 (ITM) | One observed trade; pricing is hard to validate after spread. | ~4.3 | Passive only |
+| 5200 | 1.01 (ATM) | Near-ATM, small historical cheapness at prints, but almost no fills. | ~2.9 | Small passive bid |
+| 5300 | 0.99 (ATM) | Most useful liquid near-ATM candidate; historical prints slightly below fitted FV. | ~2.1 | Small passive bid |
+| 5400 | 0.97 (OTM) | Most liquid OTM candidate; historical prints slightly below fitted FV, but edge is TTE-sensitive. | ~1.4 | Small passive long-gamma |
+| 5500 | 0.95 (OTM) | Liquid but high spread-to-mid; near floor-adjacent behavior. | ~1.1 | Passive only |
+| 6000 | 0.87 (deep OTM) | Pinned bid=0/ask=1; apparent IV is a tick-floor artifact. | 1.0 | Tiny passive sell only |
+| 6500 | 0.81 (deep OTM) | Pinned bid=0/ask=1; apparent IV is a tick-floor artifact. | 1.0 | Tiny passive sell only |
 
 *IV inflated by min-tick floor artifact — not a real signal.
 
@@ -81,7 +82,7 @@
 
 ## Findings: VEV_5000
 
-- Fair value: BS = ~255 (varies 254–258 by day). Market mean = 253.3, avg diff = -0.9 ticks (within spread of 6.0).
+- Historical mean mid = 253.3 / 253.3 / 258.5 across days 0 / 1 / 2 under 8d / 7d / 6d historical TTE.
 - Spread: mean 6.0
 - Tick volatility: 0.98
 - Autocorrelation (lag-1): -0.098 → weak mean-reverting
@@ -94,7 +95,7 @@
 
 ## Findings: VEV_5100
 
-- Fair value: BS ≈ 200–210 by day. Market mean slightly below BS (-1.2 ticks avg), within spread.
+- Historical mean mid = 168.1 / 165.0 / 167.3 across days 0 / 1 / 2 under 8d / 7d / 6d historical TTE.
 - Recommended strategy: Passive MM. Marginally cheap but not enough to act on confidently.
 - Confidence: medium.
 
@@ -102,35 +103,34 @@
 
 ## Findings: VEV_5200
 
-- Fair value: BS ≈ 150–165 by day. Avg diff = -1.8 ticks, spread = 2.9 — borderline (below half-spread threshold of 1.45).
-- Recommended strategy: Passive MM. Watch for convergence — misprice borderline actionable.
+- Historical mean mid = 97.5 / 95.1 / 94.0 across days 0 / 1 / 2 under 8d / 7d / 6d historical TTE.
+- At historical trade timestamps, fitted-BS fair value averaged about 86.2 versus trade price 85.3, so the edge is small and fill-limited rather than a clear taker trade.
+- Recommended strategy: Passive MM / small passive bid only. Watch for convergence, but require edge after spread.
 - Confidence: medium.
 
 ---
 
 ## Findings: VEV_5300
 
-- Fair value: BS ≈ 105–125 by day. Avg diff = -1.1 ticks, spread = 2.1 — below half-spread (1.05). Not actionable.
-- IV intraday: declines within day (day 0: 31.6% open → 30.5% close; day 2: 38.3% → 35.6%). Mild systematic overpricing at open.
-- Recommended strategy: Passive MM.
+- Historical mean mid = 48.9 / 46.9 / 44.5 across days 0 / 1 / 2 under 8d / 7d / 6d historical TTE.
+- At historical trade timestamps, fitted-BS fair value averaged about 45.1 versus trade price 44.2, so the average cheapness is around 1 tick and close to the half-spread.
+- Recommended strategy: Passive MM / small passive bid only.
 - Confidence: medium.
 
 ---
 
 ## Findings: VEV_5400
 
-- Fair value: BS = 13.6–26.1 per day (mean ~19.9 at T=3.5d). Market mean = 16.0. **Avg diff = -3.8 ticks below BS.**
+- Historical mean mid = 18.5 / 15.7 / 13.7 across days 0 / 1 / 2 under 8d / 7d / 6d historical TTE.
+- At historical trade timestamps, fitted-BS fair value averaged about 15.5 versus trade price 14.9, so the measured cheapness is modest, not the older 3-4 tick headline edge.
 - Spread: mean 1.38
 - Tick volatility: 0.27
 - Autocorrelation (lag-1): -0.254 → mean-reverting
-- Misprice by day: day 0 = -7.6 ticks, day 1 = -3.9 ticks, day 2 = +0.2 ticks (converging)
-- Mispriced on 83% of 30-tick buckets (day 0/1)
 - Trade count: 225 over 3 days — most liquid OTM strike
 - Delta: ~0.20 → hedge by shorting 0.20 VEV per unit long
-- Recommended strategy: Passive buy at `bs_call(S, 5400, T, 0.342) − 0.5`. Delta hedge in VEV. Net risk: gamma + vega.
-- Entry timing: day-0 edge is largest (-7.6 ticks) — enter early in round.
-- Recommended position sizing: up to 50% of limit (150 units). Start at 20–30 given thin book.
-- Confidence: medium — misprice persistent on days 0/1 but converges by day 2. May vanish in R4/R5.
+- Recommended strategy: Passive buy only when live 5d BS/fitted-smile fair value clears the bid by at least spread plus safety margin. Delta hedge in VEV. Net risk: gamma + vega.
+- Recommended position sizing: small, around 20–40 units unless live fills/markouts confirm the edge.
+- Confidence: medium-low — this is the best long-gamma candidate, but the edge is TTE-sensitive and live TTE=5 is outside the historical 8/7/6 sample.
 
 ---
 
@@ -145,32 +145,32 @@
 
 ## Findings: VEV_6000
 
-- Fair value: BS ≈ 0.000. Market mid = **0.5** (pinned at min tick: bid=0, ask=1). Std = 0.000.
+- Market mid = **0.5** across the sample (pinned at min tick: bid=0, ask=1). Std = 0.000.
 - Spread: 1.0 (bid=0, ask=1 — single-sided market)
 - Trade count: 284 over 3 days (noise trades at floor price)
-- P(VEV > 6000 at expiry from S=5250, σ=34.2%, T=5d) ≈ **0.3%**
-- Recommended strategy: **Sell at ask = 1.** Collect 1-tick premium. Expires worthless with 99.7% probability.
-- Recommended position sizing: sell up to full limit (300). Single-sided market — fill partial.
-- Confidence: high — pinned at floor, BS = 0, tail risk negligible.
+- P(VEV > 6000 at expiry from S=5250) is very sensitive to the volatility convention; use live 5d pricing with the same calendar-day annualization as the EDA before sizing this trade.
+- Recommended strategy: Passive sell at ask = 1 only in small size. Do not treat the floor artifact as guaranteed edge.
+- Recommended position sizing: capped and cautious; fill quality matters more than theoretical mid.
+- Confidence: medium — pinned floor is real historically, but live jump/tail risk is out-of-sample.
 
 ---
 
 ## Findings: VEV_6500
 
-- Fair value: BS ≈ 0.000. Market mid = **0.5** (identical to VEV_6000 — pinned at min tick).
+- Market mid = **0.5** across the sample (identical to VEV_6000 — pinned at min tick).
 - Spread: 1.0
-- Trade count: 0 over 3 days — no observed trades
-- P(VEV > 6500 at expiry) ≈ **0.001%**
-- Recommended strategy: **Sell at ask = 1.** Same rationale as VEV_6000, even lower tail risk.
-- Recommended position sizing: sell up to full limit (300).
-- Confidence: high.
+- Trade count: 284 over 3 days in the generated data summary
+- P(VEV > 6500 at expiry) is very sensitive to the volatility convention; use live 5d pricing with the same calendar-day annualization as the EDA before sizing this trade.
+- Recommended strategy: Passive sell at ask = 1 only in small size. Same floor-artifact caution as VEV_6000.
+- Recommended position sizing: capped and cautious.
+- Confidence: medium.
 
 ---
 
 ## Cross-Product Notes
 
 1. HGP and VEV structurally similar (both stationary FV, both contrarian OBI) but uncorrelated — trade independently.
-2. ATM vol surface (5000–5500) is flat at ~33–34% IV, slightly below realized (34.2%) — market-wide under-pricing of vol.
-3. VEV_5400 is the highest-conviction alpha trade: persistent misprice, liquid, actionable delta hedge.
-4. VEV_6000/6500 are the lowest-risk free-carry trade: sell at ask=1, near-zero probability of loss.
+2. Historical generated EDA uses 8/7/6 days to expiry; live trading uses 5 days, so OTM option fair values need live 5d pricing rather than historical markdown numbers.
+3. VEV_5400 is the best long-gamma candidate, but only as a passive, size-capped trade because the old 3-4 tick edge was based on stale TTE assumptions.
+4. VEV_6000/6500 are floor-artifact carry candidates, not guaranteed free carry; sell only passively and with capped size.
 5. Deep ITM (4000/4500): skip entirely — no option edge, just VEV delta-1 exposure with extra spread cost.

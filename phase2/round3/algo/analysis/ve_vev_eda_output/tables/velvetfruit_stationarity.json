@@ -121,7 +121,7 @@
   "within_day_returns": {
     "lag1_return_acf": -0.1585701926963703,
     "adf_return": {
-      "stat": -107.13594029151493,
+      "stat": -107.13594029151494,
       "pvalue": 0.0
     },
     "variance_ratio_return_cumsum": {
