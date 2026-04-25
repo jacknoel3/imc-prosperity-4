@@ -1,0 +1,58 @@
+Round 3 bid prediction recommendations
+=============================================
+
+Core assumptions:
+- Reserve prices are 670, 675, ..., 920 inclusive.
+- Trade requires bid > reserve.
+- Bid 1 takes precedence.
+- Bid 2 is unpenalised only if b2 > competitor mean bid 2.
+- Competitor distribution is scenario-based, not known.
+
+Behavioural modelling update:
+- Nash/mechanical anchor is 836.
+- Very few qualified teams are expected to bid meaningfully below/near 835.
+- Caution should push the mean upward, but margin discipline keeps it anchored.
+- Exact round numbers are given low weight.
+- Bids equal to +1, +2, or +3 above a multiple of 5 are preferred.
+
+Scenario summary:
+scenario  mean_of_mean  std_of_mean    p1_mean    p5_mean  p25_mean  median_mean  p75_mean   p95_mean  p99_mean  best_b1  best_b2  best_expected_pnl_per_gardener  prob_best_b2_above_mean
+     low    847.094291     0.117322 846.821500 846.902250 847.01450    847.09375  847.1735 847.288250 847.36700      761      851                       83.588235                      1.0
+ central    852.697205     0.138675 852.373497 852.468000 852.60450    852.69725  852.7910 852.924500 853.01925      761      856                       83.078431                      1.0
+    high    859.181495     0.149236 858.833997 858.935988 859.08175    859.18075  859.2810 859.427262 859.53425      766      861                       82.372549                      1.0
+
+Top EV bid pair by scenario:
+- low: b1=761, b2=851, EV/gardener=83.5882, P(b2 > mean)=1.000
+- central: b1=761, b2=856, EV/gardener=83.0784, P(b2 > mean)=1.000
+- high: b1=766, b2=861, EV/gardener=82.3725, P(b2 > mean)=1.000
+
+Central scenario top 10:
+ b1  b2  expected_pnl_per_gardener  prob_b2_above_mean  mean_shortfall_if_fails
+761 856                  83.078431             1.00000                 0.000000
+766 856                  82.980392             1.00000                 0.000000
+756 856                  82.980392             1.00000                 0.000000
+761 853                  82.881589             0.98515                 0.000723
+756 853                  82.842330             0.98515                 0.000723
+766 853                  82.724768             0.98515                 0.000723
+761 857                  82.705882             1.00000                 0.000000
+771 856                  82.686275             1.00000                 0.000000
+751 856                  82.686275             1.00000                 0.000000
+766 857                  82.627451             1.00000                 0.000000
+
+Central scenario safety table:
+ target_clear_percentile  mean_quantile  suggested_b1  suggested_b2  expected_pnl_per_gardener_under_distribution  actual_prob_b2_above_mean
+                    50.0     852.697250           761           853                                     82.881589                    0.98515
+                    60.0     852.732850           761           853                                     82.881589                    0.98515
+                    70.0     852.770000           761           853                                     82.881589                    0.98515
+                    75.0     852.791000           761           853                                     82.881589                    0.98515
+                    80.0     852.812750           761           853                                     82.881589                    0.98515
+                    85.0     852.840037           761           853                                     82.881589                    0.98515
+                    90.0     852.876500           761           853                                     82.881589                    0.98515
+                    95.0     852.924500           761           853                                     82.881589                    0.98515
+                    97.5     852.967750           761           853                                     82.881589                    0.98515
+                    99.0     853.019250           761           854                                     82.529412                    1.00000
+
+Interpretation:
+The EV-optimal fixed pair can sometimes tolerate a modest probability of not clearing the mean because the penalty may be smaller than the margin lost from overbidding. If you strongly want to avoid the penalty, prefer the quantile/safety table rather than the raw EV top pair.
+The central scenario is probably the most relevant if you believe the field is logical, cautious, concentrated, and still anchored by the 836 mechanical optimum.
+The low scenario represents stronger last-year/Nash anchoring. The high scenario represents stronger caution around the strict above-mean rule.
