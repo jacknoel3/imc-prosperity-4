@@ -1,0 +1,7 @@
+horizon_timestamp,maker_side,count,mean_mid_mark_pnl,median_mid_mark_pnl,positive_rate
+100,buy_at_bid_after_sell_pressure,591,2.3409475465313028,2.5,0.9509306260575296
+100,sell_at_ask_after_buy_pressure,781,1.6959026888604354,2.5,0.7733674775928298
+500,buy_at_bid_after_sell_pressure,591,2.472927241962775,2.5,0.8646362098138748
+500,sell_at_ask_after_buy_pressure,781,1.6466069142125481,1.5,0.7106274007682458
+1000,buy_at_bid_after_sell_pressure,591,2.3003384094754655,2.5,0.7631133671742809
+1000,sell_at_ask_after_buy_pressure,781,1.7195902688860436,1.5,0.6811779769526248

@@ -1,0 +1,7 @@
+day,test,executable_count,mean_edge,max_edge
+0,lower_bound_buy_call_at_ask,146,0.5958904109589042,1.5
+0,upper_bound_sell_call_at_bid,0,0.0,0.0
+1,lower_bound_buy_call_at_ask,166,0.5421686746987951,1.0
+1,upper_bound_sell_call_at_bid,0,0.0,0.0
+2,lower_bound_buy_call_at_ask,166,0.5963855421686747,2.0
+2,upper_bound_sell_call_at_bid,0,0.0,0.0

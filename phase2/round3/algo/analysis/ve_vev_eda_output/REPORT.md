@@ -49,7 +49,7 @@ Anomaly highlights:
 
 ![Velvetfruit trade side](charts/velvetfruit_trade_minus_mid_by_side.png)
 
-Regime classification: **trending**. ADF/KPSS/Hurst/variance-ratio diagnostics are in `tables/velvetfruit_stationarity.json`.
+Regime classification: **price-persistent with local tick mean reversion**. ADF/KPSS/Hurst/variance-ratio diagnostics are in `tables/velvetfruit_stationarity.json`.
 
 
 Note: the blank starts in rolling spread/RV charts are intentional 500-tick rolling-window warmup inside each historical day, not missing data.
@@ -174,7 +174,7 @@ Top no-arbitrage violation groups:
 
 ## Section 6 - Strategy Hypotheses
 
-- Velvetfruit should be traded **maker-first, with selective taker hedges**. The classification is trending and imbalance has low explanatory power unless filtered.
+- Velvetfruit should be traded **maker-first, with selective taker hedges**. The classification is price-persistent with local tick mean reversion and imbalance has low explanatory power unless filtered.
 
 - IV sits below RV on average by about **17.77%** using the ATM proxy and 500-tick annualized RV.
 
@@ -269,13 +269,13 @@ Order book depth profile (L1/L2/L3):
 
 Velvetfruit ACF (lags 1–5):
 
-| lag | mid_acf | ret_acf |
-| --- | --- | --- |
-| 1 | 0.9972 | -0.1588 |
-| 2 | 0.9953 | 0.004865 |
-| 3 | 0.9933 | -0.005468 |
-| 4 | 0.9914 | 0.0003303 |
-| 5 | 0.9895 | 0.001465 |
+| scope | lag | mid_acf | ret_acf |
+| --- | --- | --- | --- |
+| pooled_level | 1 | 0.9972 | -0.1586 |
+| pooled_level | 2 | 0.9953 | 0.004976 |
+| pooled_level | 3 | 0.9933 | -0.005592 |
+| pooled_level | 4 | 0.9914 | 0.0004735 |
+| pooled_level | 5 | 0.9895 | 0.001653 |
 
 
 Trade clustering (Poisson dispersion index — >1.5 = clustered, <0.7 = underdispersed):
@@ -442,3 +442,135 @@ Mean IV smile smoothness (quadratic R²) by day: {0: 0.992713900469438, 1: 0.989
 
 
 **Strategy implication:** Use EMA bands to identify when IV is elevated (sell premium) or depressed (buy gamma). Delta/gamma timeseries directly informs hedge ratios and position sizing. Gamma scalp P&L proxy shows which strikes generate the most delta-hedging edge across the 3-day window.
+
+
+## Section 10 - Quantitative Research Answers And Model Diagnostics
+
+![Answer status counts](charts/research_answer_status_counts.png)
+
+![Answer family coverage](charts/research_answer_family_coverage.png)
+
+![Model rankings](charts/model_rankings.png)
+
+![IV PCA](charts/model_iv_surface_pca.png)
+
+![Fill probability](charts/model_fill_probability.png)
+
+![No-arb persistence](charts/model_noarb_persistence.png)
+
+
+Quantitative answer coverage by family and status:
+
+| answer_family | answer_status | rows |
+| --- | --- | --- |
+| atm | measured_from_current_data | 1 |
+| bots | measured_from_current_data | 3 |
+| bots | not_identified_from_available_snapshots | 1 |
+| data | measured_from_current_data | 1 |
+| direction | measured_from_current_data | 1 |
+| fills | measured_from_current_data | 1 |
+| fills | not_identified_from_available_snapshots | 1 |
+| fills | proxy_measured_needs_execution_validation | 2 |
+| filter | measured_from_current_data | 3 |
+| floor | measured_from_current_data | 2 |
+| floor | not_identified_from_available_snapshots | 1 |
+| floor | out_of_sample_live_condition | 1 |
+| floor | proxy_measured_needs_execution_validation | 1 |
+| flow | measured_from_current_data | 6 |
+| flow | not_identified_from_available_snapshots | 1 |
+| flow | proxy_measured_needs_execution_validation | 2 |
+| gamma | proxy_measured_needs_execution_validation | 1 |
+| hedge | proxy_measured_needs_execution_validation | 3 |
+| inventory | not_identified_from_available_snapshots | 2 |
+| itm | measured_from_current_data | 2 |
+| itm | proxy_measured_needs_execution_validation | 1 |
+| market_making | proxy_measured_needs_execution_validation | 1 |
+| micro | measured_from_current_data | 10 |
+| micro | proxy_measured_needs_execution_validation | 1 |
+| noarb | measured_from_current_data | 3 |
+| noarb | proxy_measured_needs_execution_validation | 1 |
+| portfolio | proxy_measured_needs_execution_validation | 4 |
+| regime | measured_from_current_data | 1 |
+| residual | measured_from_current_data | 5 |
+| residual | not_identified_from_available_snapshots | 1 |
+
+
+First quantitative answer rows (no embedded question text):
+
+| question_id | answer_family | answer_status | primary_metric | primary_value | secondary_metric | secondary_value | evidence_csv |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Q1 | vol_iv | measured_from_current_data | mean_iv_minus_rv_500 | -0.17772404702525654 | mean_iv_minus_rv_100 | -0.1765128584378678 | research_iv_rv_window_gaps.csv |
+| Q2 | vol_iv | proxy_measured_needs_execution_validation | cost_adjusted_gamma_scalp_proxy_max | -0.18217235138740723 | mean_cost_to_midpoint_ratio | 58.787786254511616 | research_gamma_hedge_cost_sensitivity.csv |
+| Q3 | gamma | proxy_measured_needs_execution_validation | best_cost_adjusted_voucher | VEV_6000 | best_cost_adjusted_pnl | -0.18217235138740723 | research_gamma_hedge_cost_sensitivity.csv |
+| Q4 | vol_iv | measured_from_current_data | mean_gap_phi | 0.993341423339309 | mean_half_life_ticks | 108.99332547398019 | research_iv_gap_mean_reversion.csv |
+| Q5 | vol_iv | proxy_measured_needs_execution_validation | ema_signal_hit_rate_max | 0.7966804979253111 | signal_count_total | 3733 | research_atm_iv_ema_signals.csv |
+| Q6 | atm | measured_from_current_data | top_atm_proxy | VEV_5200 | top_atm_proxy_fraction | 0.518 | research_atm_proxy_counts.csv |
+| Q7 | hedge | proxy_measured_needs_execution_validation | mean_cost_to_midpoint_pnl_ratio | 58.787786254511616 | underlying_mean_spread | 4.988133333333334 | research_gamma_hedge_cost_sensitivity.csv |
+| Q8 | hedge | proxy_measured_needs_execution_validation | best_delta_rehedge_threshold | 0.2 | objective_cost_plus_error | 4135.800947708994 | research_hedge_threshold_grid.csv |
+| Q9 | fills | proxy_measured_needs_execution_validation | best_passive_positive_model_edge_rate | 1.0 | mean_model_edge | 1.0 | research_voucher_passive_favorable_fills.csv |
+| Q10 | flow | measured_from_current_data | max_pct_at_ask_by_time_bin | 1.0 | max_pct_at_bid_by_time_bin | 1.0 | research_voucher_flow_timeofday.csv |
+| Q11 | flow | not_identified_from_available_snapshots | underlying_buy_flow_forward_return_h1000 | 8.083545659063995e-05 | nan | nan | velvetfruit_flow_toxicity.csv |
+| Q12 | flow | proxy_measured_needs_execution_validation | best_micro_or_bucket_r2 | 0.020456506415716613 | linear_imbalance_r2 | 0.011051868504395879 | research_micro_predictive_features.csv |
+| Q13 | micro | proxy_measured_needs_execution_validation | ret_lag1_acf | -0.1585701926963703 | half_spread_ticks | 2.494066666666667 | velvetfruit_acf.csv |
+| Q14 | flow | measured_from_current_data | top_count_quintile_minus_other_abs_return | -3.1835404974351928e-06 | corr_trade_count_next_abs_return | 0.006069304743066738 | research_trade_cluster_price_moves.csv |
+| Q15 | flow | measured_from_current_data | buy_fraction_next_return_corr | 0.0207787151811043 | model_r2 | 0.0029056064074829413 | research_intraday_buy_fraction_predictiveness.csv |
+| Q16 | micro | measured_from_current_data | max_spread_to_future_rv_r2 | 0.32851777529644466 | max_spread_to_future_rv_corr | -0.019405135417972775 | research_spread_vol_lead.csv |
+| Q17 | micro | measured_from_current_data | total_depth_future_abs_return_corr | 0.008096032556148644 | best_abs_return_feature_r2 | 0.0009071143861467679 | research_micro_predictive_features.csv |
+| Q18 | micro | measured_from_current_data | microprice_minus_mid_r2 | 0.007227025365311279 | best_ret10_feature | all_micro_features | research_micro_predictive_features.csv |
+| Q19 | micro | measured_from_current_data | quote_change_future_ret_corr | 0.009004059806967862 | quote_change_bid_rate_mean | 0.6404973830716405 | research_micro_predictive_features.csv |
+| Q20 | micro | measured_from_current_data | outside_top_minus_inside_mean_forward_return | 9.456470745086438e-05 | outside_top_count | 18 | research_outside_top_trade_event_study.csv |
+
+
+Model diagnostics summary:
+
+| model_id | model_name | primary_metric | primary_value | interpretation | fit_status |
+| --- | --- | --- | --- | --- | --- |
+| M1 | Random walk with drift | r2 | -1.555e-06 | Drift is tiny relative to one-tick noise; useful baseline only. | implemented |
+| M2 | AR(1) return model | r2 | 0.02516 | Negative lag coefficient confirms short-horizon bid/ask bounce or micro-reversion. | implemented |
+| M3 | Fractional-noise / ARFIMA proxy | vr10 | 0.7158 | Long memory is not the first-order edge; local negative autocorrelation dominates. | implemented |
+| M4 | Ornstein-Uhlenbeck fair-value reversion | mean_half_life | 263.1 | Mid reversion is weak at the day-demeaned level; stronger signal is in one-tick returns. | implemented |
+| M5 | Regime-switching AR proxy | transition_diag | 0.3154 | Regime labels are useful for risk controls more than directional alpha. | implemented |
+| M6 | GARCH(1,1) grid | qlike | -15.89 | Volatility is persistent but stable; grid fit is a risk model, not an alpha model. | implemented |
+| M7 | GJR-GARCH / EGARCH asymmetry proxy | r2 | 0.0144 | Asymmetry is a diagnostic; it should be included only if stable out-of-sample. | implemented |
+| M8 | HAR-RV | r2 | 0.02724 | Useful for hedge-frequency and option-entry sizing. | implemented |
+| M9 | EWMA volatility | qlike | -15.88 | Fast baseline for live volatility tracking. | implemented |
+| M10 | Kalman local-level fair value | r2 | 0.9794 | Use filtered spot for Greeks only if it reduces hedge residuals in backtest. | implemented |
+| M11 | Order-book imbalance linear model | r2 | 0.01105 | Standalone imbalance has weak explanatory power. | implemented |
+| M12 | Nonlinear book-feature bucket model | r2 | 0.009791 | Nonlinear buckets are better as filters than as direct forecasts. | implemented |
+| M13 | Ordered/probit direction proxy | auc | 0.5437 | Classification calibration must beat a 50/50 baseline after costs. | implemented |
+| M14 | Poisson / negative-binomial trade arrivals | mean_dispersion | 0.9266 | Arrival process is close to Poisson, not strongly clustered. | implemented |
+| M15 | Hawkes trade-clustering proxy | branching_proxy | 0 | Self-excitation appears modest in these historical days. | implemented |
+| M16 | Autoregressive conditional duration proxy | r2 | 9.965e-08 | Duration persistence is a fill-risk feature, not a standalone trade. | implemented |
+| M17 | Black-Scholes with empirical IV | r2 | 0.9999 | Good anchor for liquid near-ATM strikes; weak for floor-price OTM vouchers. | implemented |
+| M18 | Constrained quadratic IV smile | mean_smile_r2 | 0.9896 | The smile is smooth enough for surface-fitted fair values. | implemented |
+| M19 | SVI-style smile proxy | r2 | 0.9244 | Useful lightweight alternative to raw per-strike IV. | implemented |
+| M20 | SABR-inspired smile proxy | r2 | 0.9767 | Adequate for diagnostics; live strategy should enforce monotonic/convex prices. | implemented |
+| M21 | PCA IV-surface factor model | pc1_explained | 0.8539 | Surface is low-dimensional; factor control can reduce overfitting. | implemented |
+| M22 | Bayesian hierarchical IV shrinkage proxy | r2 | 0.966 | Shrinkage is useful for sparse strikes and floor-price artifacts. | implemented |
+| M23 | Delta-hedged residual AR(1) | mean_abs_residual_acf1 | 0.1484 | Residuals mean-revert; quote edges should be passive and spread-aware. | implemented |
+| M24 | Gamma-scalping PnL attribution | best_net_gamma_scalp | 29.18 | Long near-ATM gamma is the central historical hypothesis. | implemented |
+| M25 | No-arbitrage persistence survival proxy | mean_lifetime | 1.225 | Most flags are short-lived midpoint artifacts; persistence filter required. | implemented |
+| M26 | Constrained cross-sectional option-pricing regression | mean_smile_r2 | 0.9896 | Fit constrained smiles before trading cross-strike discrepancies. | implemented |
+| M27 | Voucher fill-probability model | auc | 0.5359 | Fill probability needs more features, but depth/spread is a usable baseline. | implemented |
+| M28 | Avellaneda-Stoikov market-making proxy | spread_mean | 4.988 | Underlying can hedge options, but quote width must include adverse-selection and inventory. | implemented |
+| M29 | Linear-quadratic Greek inventory control proxy | max_gamma_capacity | 0.6638 | Inventory control must reserve underlying limit for hedging near-ATM gamma. | implemented |
+| M30 | Walk-forward ensemble proxy | mean_signal_score | 0.4589 | Best first production candidate combines long-gamma, passive fills, and strict hedge controls. | implemented |
+
+
+Quantitative blockers requiring extra data or replay:
+
+| question_id | answer_family | primary_metric | primary_value | evidence_csv | blocker_if_not_identified |
+| --- | --- | --- | --- | --- | --- |
+| Q11 | flow | underlying_buy_flow_forward_return_h1000 | 8.084e-05 | velvetfruit_flow_toxicity.csv | Requires voucher move regression with delta controls around underlying flow timestamps. |
+| Q30 | surface | pc1_explained_variance | 0.8539 | model_iv_surface_pca.csv | Future option-return target is not separately estimated by PCA factor versus per-strike IV. |
+| Q35 | surface | mean_smile_r2 | 0.9896 | voucher_iv_smile_smoothness.csv | Future trade-price prediction from constrained smile is not separately backtested. |
+| Q43 | floor | zero_time_value_iv_fraction_mean | 0 | research_floor_state.csv | Tail-risk distribution cannot be estimated from no observed floor-strike jumps. |
+| Q44 | floor | unique_mid_count_mean | 1 | research_floor_state.csv | Different live paths are not present in the historical sample. |
+| Q47 | tte | historical_min_tte_days | 6 | voucher_iv_term_structure.csv | TTE=5 is extrapolated, not observed. |
+| Q55 | fills | fill_score_auc | 0.5359 | model_fill_probability.csv | Passive quote distance requires queue-position labels not present in snapshot data. |
+| Q60 | bots | median_bid_l1_volume_cv | 0.2369 | voucher_bot_analysis.csv | Stable volume alone does not identify bot IDs. |
+| Q74 | residual | most_negative_residual_acf1 | -0.2704 | research_residual_day_stability.csv | Passive-only monetization needs order-book replay and queue fills. |
+| Q84 | inventory | max_underlying_limit_used_fraction | 1 | research_portfolio_greek_baskets.csv | End-of-simulation utility/penalty is not observable from EDA snapshots. |
+| Q85 | inventory | terminal_inventory_model_count | 4 | research_portfolio_greek_baskets.csv | Forced close versus hold requires final mark-to-market and exchange liquidation rules. |
+| Q90 | tte | mean_fair_tte5_minus_tte6 | -2.405 | research_tte5_sensitivity.csv | Live TTE=5 is not directly observed. |
+| Q97 | simulation | available_snapshot_rows | 3.3e+05 | data_integrity.csv | Joint simulator/replay is not implemented in this EDA. |

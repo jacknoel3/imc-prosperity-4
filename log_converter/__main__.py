@@ -1,31 +1,68 @@
-"""CLI entry point for log-converter."""
+"""
+CLI entry point for IMC Prosperity 4 Log Converter.
 
+Usage:
+    python -m log_converter <log_file>
+    
+Examples:
+    python -m log_converter 331920.log
+"""
+
+import argparse
 import sys
 from pathlib import Path
-from log_converter.converter import parse_to_exact_format
+from converter import convert_log_to_csv
 
 
 def main():
-    """Main CLI function."""
-    if len(sys.argv) < 2:
-        print("Usage: python -m log_converter <file.log>")
-        print("\nExample:")
-        print("  python -m log_converter session_123.log")
+    """Main CLI entry point."""
+    parser = argparse.ArgumentParser(
+        description='Convert IMC Prosperity 4 .log files to CSV format',
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    
+    parser.add_argument(
+        'log_file',
+        type=str,
+        help='Path to the .log file to convert'
+    )
+    
+    # Keeping arguments for CLI compatibility but ignoring them as the backend doesn't support them
+    parser.add_argument(
+        '--prices-output',
+        type=str,
+        default=None,
+        help='Custom output path for prices CSV (Ignored)'
+    )
+    
+    parser.add_argument(
+        '--trades-output',
+        type=str,
+        default=None,
+        help='Custom output path for trades CSV (Ignored)'
+    )
+    
+    args = parser.parse_args()
+    
+    # Validate input file exists
+    log_path = Path(args.log_file)
+    if not log_path.exists():
+        print(f"❌ Error: File not found: {args.log_file}", file=sys.stderr)
         sys.exit(1)
     
-    log_file = Path(sys.argv[1])
-    
-    if not log_file.exists():
-        sys.exit(f"❌ File not found: {log_file}")
-    
-    if log_file.suffix != '.log':
-        print(f"⚠️  Warning: file does not have .log extension ({log_file.suffix})")
-    
     try:
-        parse_to_exact_format(log_file)
+        prices_path, trades_path = convert_log_to_csv(args.log_file)
+        
+        print(f"\n📁 Output files listed in stdout above.")
+        
+        return 0
+        
     except Exception as e:
-        sys.exit(f"❌ Conversion error: {e}")
+        print(f"\n❌ Error during conversion: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        return 1
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    sys.exit(main())
