@@ -41,7 +41,6 @@ Z500_LONG_SLOPE = 35
 LOCAL_LONG_BASE_TARGET = 110
 LOCAL_LONG_MAX_TARGET = 155
 LOCAL_LONG_SLOPE = 1.0
-
 LOCAL_SHORT_BASE_TARGET = 115
 LOCAL_SHORT_MAX_TARGET = 155
 LOCAL_SHORT_SLOPE = 1.0
@@ -654,10 +653,6 @@ class Trader:
             elif basket_z > 0.85:
                 sell_size = int(sell_size * 1.20)
                 buy_size = max(1, int(buy_size * 0.70)) if buy_size > 0 else 0
-        # EDA voucher_maker_taker_fills: VEV_5400/5500 = 0% fills_at_ask. Bots only sell.
-        # Posting passive ask is wasted capacity. Keep only as inventory exit when long.
-        if product in ("VEV_5400", "VEV_5500") and pos <= 0:
-            sell_size = 0
         if taker:
             if pos > -soft and bid >= fair + dyn_edge + spread:
                 self._sweep_sell(product, depth, bid, min(sell_size, pos + soft), om)
