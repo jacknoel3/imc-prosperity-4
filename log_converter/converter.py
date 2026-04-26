@@ -1,4 +1,4 @@
-"""Core conversion logic for JSON logs to CSV format (Round 3 Updated)."""
+"""Core conversion logic for JSON logs to CSV format (Round 4 Updated)."""
 
 import json
 import pandas as pd
@@ -6,16 +6,31 @@ import io
 from pathlib import Path
 import sys
 
-# Definizione rigida dei target del Round 3
+# Definizione rigida dei target del Round 4. I prodotti algoritmici sono uguali
+# al Round 3; il Round 4 aggiunge buyer/seller nel trade history.
 ROUND_3_PRODUCTS = [
     'HYDROGEL_PACK', 'VELVETFRUIT_EXTRACT',
     'VEV_4000', 'VEV_4500', 'VEV_5000', 'VEV_5100', 'VEV_5200',
     'VEV_5300', 'VEV_5400', 'VEV_5500', 'VEV_6000', 'VEV_6500'
 ]
 
+
+def _join_unique(values) -> str:
+    """Join non-empty unique counterparty IDs while preserving first appearance."""
+    seen = []
+    for value in values:
+        if pd.isna(value):
+            continue
+        text = str(value)
+        if not text:
+            continue
+        if text not in seen:
+            seen.append(text)
+    return "|".join(seen)
+
 def parse_to_exact_format(log_path: Path):
     """
-    Convert IMC Prosperity Round 3 JSON log to a wide-format CSV.
+    Convert IMC Prosperity Round 4 JSON log to a wide-format CSV.
     
     Args:
         log_path: Path to the input JSON log file
@@ -50,6 +65,10 @@ def parse_to_exact_format(log_path: Path):
     final_parts = []
 
     if not df_trades.empty:
+        if 'buyer' not in df_trades.columns:
+            df_trades['buyer'] = None
+        if 'seller' not in df_trades.columns:
+            df_trades['seller'] = None
         df_trades['side'] = df_trades.apply(lambda x: 'BUY' if x.get('buyer') == 'SUBMISSION' else 'SELL', axis=1)
         if 'symbol' in df_trades.columns:
             df_trades['symbol'] = df_trades['symbol'].str.lower()
@@ -111,6 +130,23 @@ def parse_to_exact_format(log_path: Path):
         sys.exit("Nessun dato trovato.")
 
     final_df = pd.concat(final_parts, axis=1).reset_index()
+    if not df_trades.empty:
+        actual_trade_idx = [c for c in idx_cols if c in df_trades.columns]
+        if actual_trade_idx:
+            counterparties = df_trades.groupby(actual_trade_idx).agg({
+                'buyer': _join_unique,
+                'seller': _join_unique,
+            }).reset_index().rename(columns={
+                'buyer': 'Buyer',
+                'seller': 'Seller',
+            })
+            final_df = pd.merge(final_df, counterparties, on=actual_trade_idx, how='left')
+        else:
+            final_df['Buyer'] = None
+            final_df['Seller'] = None
+    else:
+        final_df['Buyer'] = None
+        final_df['Seller'] = None
     final_df['algo_log'] = ""
     
     output_path = f"{log_path.stem}_lossless.csv"
