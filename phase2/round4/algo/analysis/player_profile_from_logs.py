@@ -181,13 +181,17 @@ def enrich_trades(trades: pd.DataFrame, activities: pd.DataFrame) -> pd.DataFram
     enriched = trades.merge(book, on=["source_log", "day", "timestamp", "symbol"], how="left")
     enriched["spread"] = enriched["ask_price_1"] - enriched["bid_price_1"]
     enriched["price_minus_mid"] = enriched["price"] - enriched["mid_price"]
+    enriched["price_minus_bid"] = enriched["price"] - enriched["bid_price_1"]
+    enriched["price_minus_ask"] = enriched["price"] - enriched["ask_price_1"]
     enriched["at_or_above_ask"] = enriched["price"] >= enriched["ask_price_1"]
     enriched["at_or_below_bid"] = enriched["price"] <= enriched["bid_price_1"]
     enriched["probe_mode"] = ((enriched["timestamp"] // 3000) % 6).map(MODE_NAMES)
     for h in HORIZONS:
         enriched[f"buyer_markout_{h}"] = enriched[f"future_mid_{h}"] - enriched["price"]
         enriched[f"seller_markout_{h}"] = enriched["price"] - enriched[f"future_mid_{h}"]
-        enriched[f"buyer_profitable_{h}"] = enriched[f"buyer_markout_{h}"] > 0
+        enriched[f"buyer_profitable_{h}"] = (enriched[f"buyer_markout_{h}"] > 0).where(
+            enriched[f"buyer_markout_{h}"].notna(),
+        )
     return enriched
 
 

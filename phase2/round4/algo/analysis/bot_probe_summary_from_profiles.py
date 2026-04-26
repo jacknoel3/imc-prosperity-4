@@ -136,7 +136,7 @@ def build_outputs(backtests_dir: Path, profile_dir: Path) -> None:
     product_rows: list[dict] = []
     mode_rows: list[dict] = []
 
-    for log_path in sorted(backtests_dir.glob("probe_pair_*_logs/*.log")):
+    for log_path in sorted(backtests_dir.glob("probe_*_logs/*.log")):
         run_id = log_path.stem
         bot = log_path.parent.name.replace("_logs", "")
         meta = read_probe_meta(log_path.with_suffix(".py"))
@@ -206,6 +206,10 @@ def build_outputs(backtests_dir: Path, profile_dir: Path) -> None:
                     "qty": float(g["quantity"].sum()),
                     "products": safe_join(g["symbol"]),
                     "avg_price": float(g["price"].mean()),
+                    "avg_price_minus_mid": safe_mean(g["price_minus_mid"]),
+                    "avg_price_minus_bid": safe_mean(g["price_minus_bid"]),
+                    "avg_price_minus_ask": safe_mean(g["price_minus_ask"]),
+                    "avg_spread": safe_mean(g["spread"]),
                     "avg_markout_1": safe_mean(g["submission_markout_1"]),
                     "avg_markout_5": safe_mean(g["submission_markout_5"]),
                     "avg_markout_10": safe_mean(g["submission_markout_10"]),
@@ -226,6 +230,10 @@ def build_outputs(backtests_dir: Path, profile_dir: Path) -> None:
                     "fills": int(len(g)),
                     "qty": float(g["quantity"].sum()),
                     "avg_price": float(g["price"].mean()),
+                    "avg_price_minus_mid": safe_mean(g["price_minus_mid"]),
+                    "avg_price_minus_bid": safe_mean(g["price_minus_bid"]),
+                    "avg_price_minus_ask": safe_mean(g["price_minus_ask"]),
+                    "avg_spread": safe_mean(g["spread"]),
                     "avg_markout_1": safe_mean(g["submission_markout_1"]),
                     "avg_markout_5": safe_mean(g["submission_markout_5"]),
                     "avg_markout_10": safe_mean(g["submission_markout_10"]),
@@ -243,6 +251,10 @@ def build_outputs(backtests_dir: Path, profile_dir: Path) -> None:
                     "fills": int(len(g)),
                     "qty": float(g["quantity"].sum()),
                     "net_signed_qty": float(g["signed_qty"].sum()),
+                    "avg_price_minus_mid": safe_mean(g["price_minus_mid"]),
+                    "avg_price_minus_bid": safe_mean(g["price_minus_bid"]),
+                    "avg_price_minus_ask": safe_mean(g["price_minus_ask"]),
+                    "avg_spread": safe_mean(g["spread"]),
                     "avg_markout_1": safe_mean(g["submission_markout_1"]),
                     "avg_markout_5": safe_mean(g["submission_markout_5"]),
                     "avg_markout_10": safe_mean(g["submission_markout_10"]),
@@ -311,6 +323,16 @@ def aggregate_weighted(
                 "avg_markout_10_w_by_fills": weighted_mean(g, "avg_markout_10", "fills"),
                 "avg_markout_50_w_by_fills": weighted_mean(g, "avg_markout_50", "fills"),
                 "avg_win_rate_10_w_by_fills": weighted_mean(g, "win_rate_10", "fills"),
+                "avg_price_minus_mid_w_by_fills": weighted_mean(g, "avg_price_minus_mid", "fills")
+                if "avg_price_minus_mid" in g
+                else float("nan"),
+                "avg_price_minus_bid_w_by_fills": weighted_mean(g, "avg_price_minus_bid", "fills")
+                if "avg_price_minus_bid" in g
+                else float("nan"),
+                "avg_price_minus_ask_w_by_fills": weighted_mean(g, "avg_price_minus_ask", "fills")
+                if "avg_price_minus_ask" in g
+                else float("nan"),
+                "avg_spread_w_by_fills": weighted_mean(g, "avg_spread", "fills") if "avg_spread" in g else float("nan"),
             }
         )
         if include_net and "net_signed_qty" in g:

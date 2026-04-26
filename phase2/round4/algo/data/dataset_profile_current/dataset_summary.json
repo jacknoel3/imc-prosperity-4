@@ -1,0 +1,36 @@
+{
+  "trade_events": 4281,
+  "price_rows": 360000,
+  "missing_mid_trade_events": 0,
+  "unique_days": [
+    1,
+    2,
+    3
+  ],
+  "unique_products": [
+    "HYDROGEL_PACK",
+    "VELVETFRUIT_EXTRACT",
+    "VEV_4000",
+    "VEV_4500",
+    "VEV_5000",
+    "VEV_5100",
+    "VEV_5200",
+    "VEV_5300",
+    "VEV_5400",
+    "VEV_5500",
+    "VEV_6000",
+    "VEV_6500"
+  ],
+  "unique_players": [
+    "Mark 01",
+    "Mark 14",
+    "Mark 22",
+    "Mark 38",
+    "Mark 49",
+    "Mark 55",
+    "Mark 67"
+  ],
+  "pair_product_rows": 41,
+  "player_rows": 7,
+  "network_edges": 19
+}
