@@ -7,7 +7,9 @@ Generated from:
 Scope:
 - Public datasets measure historical player-player behavior.
 - Raw backtest logs measure SUBMISSION fills, probe modes, adverse selection, and bot profitability.
-- Current raw logs include 23 tests: 19 original pair probes plus 4 confirm probes.
+- Current raw logs include 25 tests: 19 original pair probes, 4 confirm probes,
+  and 2 production-like strategies (`strat46_round4_player_profile` and
+  `strat47_round4_hard_player_filters`).
 
 ## Sanity Checks
 
@@ -20,13 +22,14 @@ Dataset profile:
 - Network edges: 19.
 
 Log profile:
-- Enriched trade events: 17,444.
-- SUBMISSION trade events: 14,556.
-- Deduplicated non-SUBMISSION market trades from logs: 164.
+- Enriched trade events: 18,161.
+- SUBMISSION trade events: 15,060.
+- Deduplicated non-SUBMISSION market trades from logs: 165.
 - Pair-product rows: 100.
 - Player rows: 8.
 - Network edges: 29.
-- Bot decision rows: 23.
+- Bot decision rows: 23 probe/confirm rows, plus 2 manually reviewed
+  production-like strategy rows.
 
 Win rates exclude rows with missing future-mid values. Positive SUBMISSION markout means the fill moved in our favor; negative means adverse selection.
 
@@ -76,14 +79,42 @@ The original 19 pair-probes were useful for sampling but are not trading logic:
 - Passive bait/fade logic is much better than aggressive taker probing.
 - Repeated VE pair-probes converged to the same negative profile: roughly -3,322 profit, 369 fills, MO10 around -2.004.
 
+## Production-Like Strategy Tests
+
+`strat46_round4_player_profile`:
+- Total profit: +9,055.131.
+- Own fills: 417, total qty 2,680.
+- PnL came mainly from vouchers: VEV_5000 +5,794.070, VEV_5100 +4,632.441, VEV_5200 +2,207.014.
+- Main problem: HYDROGEL_PACK -3,664.000.
+- SUBMISSION markout against Mark 14 was strongly negative: BUY from Mark 14 MO10 -3.989, SELL to Mark 14 MO10 -4.370.
+- SUBMISSION markout against Mark 01 was also negative: BUY from Mark 01 MO10 -2.959, SELL to Mark 01 MO10 -2.328.
+- Mark 38 remained cleanly fadeable: BUY from Mark 38 MO10 +4.692, SELL to Mark 38 MO10 +5.079.
+- Mark 55 remained useful VE liquidity: BUY from Mark 55 MO10 +2.053, SELL to Mark 55 MO10 +2.909.
+- Direct Mark 22 fills were not enough to prove a direct cheap-convexity edge: BUY from Mark 22 MO10 -0.184, SELL to Mark 22 MO10 -0.792.
+- Direct Mark 67 fills were sparse but adverse when Mark 67 bought VE from SUBMISSION: SELL to Mark 67 MO10 -1.000, MO50 -5.500.
+
+`strat47_round4_hard_player_filters`:
+- Total profit: +2,969.642.
+- Own fills: 87, total qty 489.
+- HYDROGEL_PACK improved sharply from -3,664.000 to +214.000.
+- The price of that protection was excessive capacity reduction: fills fell from 417 to 87, and voucher PnL was much smaller.
+- Mark 14 remained toxic even after reduced exposure: BUY from Mark 14 MO10 -6.080, SELL to Mark 14 MO10 -4.196.
+- Mark 38 remained fadeable: BUY from Mark 38 MO10 +5.875, SELL to Mark 38 MO10 +4.944.
+- The result rejects broad hard blocking across vouchers/VE. It supports hard Mark 14 protection on HGP, but soft skewing rather than global cancellation on vouchers and VE.
+
 ## Working Bot Interpretation
 
 - Mark 14: strongest informed player. Follow/avoid logic is confirmed and should be developed further.
+- Mark 14 production update: reactive guards are not enough. The first toxic fill is often already expensive. HGP needs a true hard guard; vouchers/VE need pre-emptive quote skew and smaller toxic-side size.
 - Mark 38: weak/fadeable, especially HGP and VEV_4000/4500. Avoid pushing the fade too far into higher vouchers where the signal decays.
+- Mark 38 production update: the fade survived both production-like tests and is one of the cleanest executable player signals.
 - Mark 01: informed historical buyer, especially vouchers and VE vs Mark 55. Avoid selling cheap convexity into Mark 01.
+- Mark 01 production update: direct SUBMISSION fills remained adverse in both production-like tests. Use Mark 01 mainly as a no-cheap-sell/skew signal, not as a reason to shut down all voucher trading.
 - Mark 22: structural voucher seller historically, but our direct confirm sample is not large enough. Still likely important, not yet fully quantified from SUBMISSION logs.
+- Mark 22 production update: direct SUBMISSION fills did not prove a standalone edge. Mark 22 is most useful as a contextual network signal when Mark 01/14 are buying vouchers from Mark 22.
 - Mark 55: noisy/liquidity source on VE. Good candidate to trade against, especially when not conflicting with Mark 14/67 signals.
 - Mark 67: historically bullish VE buyer. Current bot-level VE test is positive, but direct Mark 67 fill count remains too small for a final microstructure rule.
+- Mark 67 production update: sparse direct fills remain consistent with "do not sell VE to Mark 67"; market-network Mark 67 buying stayed positive.
 - Mark 49: mostly liquidity/noisy seller in historical VE network; limited direct SUBMISSION evidence.
 
 ## Remaining Tests
@@ -91,6 +122,8 @@ The original 19 pair-probes were useful for sampling but are not trading logic:
 Required if we want full confidence:
 - Rerun Mark 22 voucher-seller probing with wider/more persistent passive bids. Current direct sample is only 4 fills.
 - Rerun Mark 67 VE probing if the goal is specifically to validate direct Mark 67 behavior, not just profitable VE behavior around the same regime.
+- Test `strat48_round4_hgp_hard_voucher_soft`: the specific hypothesis is that HGP hard protection should preserve the `strat47` HGP improvement while recovering a meaningful share of `strat46` voucher PnL.
+- Run motivation probes that separate informed directional demand, liquidity provision, inventory dumping, and mechanical hedging.
 
 Not urgent:
 - Mark 14 follow/avoid is already confirmed by dataset and logs.
