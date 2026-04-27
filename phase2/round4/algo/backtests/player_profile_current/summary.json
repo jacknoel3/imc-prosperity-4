@@ -1,8 +1,8 @@
 {
-  "trade_events": 18161,
-  "submission_trade_events": 15060,
-  "market_unique_trade_events": 165,
-  "pair_product_rows": 100,
+  "trade_events": 25774,
+  "submission_trade_events": 21091,
+  "market_unique_trade_events": 196,
+  "pair_product_rows": 101,
   "player_rows": 8,
   "network_edges": 29
 }

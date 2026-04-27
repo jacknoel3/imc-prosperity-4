@@ -1,13 +1,13 @@
 # Round 4 Probe Findings
 
-Generated from 19 pair-probe backtests, 4 confirm-probes, and 2
-production-like strategy tests in `phase2/round4/algo/backtests`.
+Generated from 19 pair-probe backtests, 4 confirm-probes, 3 production-like
+strategy tests, and 8 motivation probes in `phase2/round4/algo/backtests`.
 
 ## Data Shape
 
-- Total enriched trade events across logs: 18,161.
-- SUBMISSION trade events across all logs: 15,060.
-- Deduplicated non-SUBMISSION market trades: 165.
+- Total enriched trade events across logs: 24,169.
+- SUBMISSION trade events across all logs: 19,959.
+- Deduplicated non-SUBMISSION market trades: 196.
 - Important caveat: each backtest replays the same market day. External player-player trades are therefore duplicated across logs unless we use the `market_unique_*` outputs.
 
 ## Strongest Findings
@@ -71,6 +71,30 @@ production-like strategy tests in `phase2/round4/algo/backtests`.
 - Conclusion: use hard guards only where clearly needed, especially HGP vs
   Mark 14; use soft quote skew for vouchers and VE.
 
+`strat48_round4_hgp_hard_voucher_soft`:
+- Profit +12,605, best production-like result so far.
+- HGP stayed fixed at +214 while voucher PnL recovered strongly.
+- Confirms the right architecture: product alpha first, narrow hard guards only
+  where proven, soft player skew elsewhere.
+
+## Motivation Probe Lessons
+
+- Mark14: confirmed as informed/toxic. Motivation probes show that direct
+  exposure to Mark14 dominates losses when probe design is loose.
+- Mark01: confirmed as informed convexity/VE demand. Bait/follow tests against
+  Mark01 are negative; use it as a no-cheap-sell and demand signal.
+- Mark22: confirmed as structural source in the network, not standalone direct
+  edge for SUBMISSION.
+- Mark38: confirmed fadeable, but probe design must isolate Mark38 from Mark14.
+- Mark55: direct Mark55 VE fills are positive, but broad VE modes lose when
+  Mark01/14 are also active.
+- Mark67: bullish VE signal remains sparse; avoid selling to it, do not chase
+  large follow buys.
+- Mark49: contextual VE source around Mark67, limited standalone edge.
+
+Detailed report:
+- `phase2/round4/algo/backtests/player_profile_current/motivation_probe_findings.md`
+
 ## Probe Mechanics
 
 - Passive/bait modes produced positive markouts:
@@ -85,11 +109,11 @@ production-like strategy tests in `phase2/round4/algo/backtests`.
 
 ## Tests Still Worth Running
 
-1. `strat48_round4_hgp_hard_voucher_soft`.
-   - Goal: keep the HGP improvement from `strat47` while recovering much of
-     the voucher PnL from `strat46`.
-   - Success condition: HGP not materially negative, voucher PnL meaningfully
-     above `strat47`, and Mark14/Mark01 markout less toxic than `strat46`.
+1. `strat49_round4_player_anticipation`.
+   - Goal: use learned player timing windows to prepare before high-probability
+     bot activity.
+   - Success condition: improve PnL retention versus `strat48`, keep HGP
+     positive, and reduce toxic Mark14/Mark01 fill share.
 
 2. More Mark 67 VELVETFRUIT_EXTRACT probes.
    - Goal: confirm whether Mark 67 is genuinely informed or just sparse/lucky.

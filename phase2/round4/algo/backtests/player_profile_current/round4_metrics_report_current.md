@@ -7,9 +7,9 @@ Generated from:
 Scope:
 - Public datasets measure historical player-player behavior.
 - Raw backtest logs measure SUBMISSION fills, probe modes, adverse selection, and bot profitability.
-- Current raw logs include 25 tests: 19 original pair probes, 4 confirm probes,
-  and 2 production-like strategies (`strat46_round4_player_profile` and
-  `strat47_round4_hard_player_filters`).
+- Current raw logs include 34 tests: 19 original pair probes, 4 confirm probes,
+  3 production-like strategies (`strat46`, `strat47`, `strat48`), and 8
+  motivation probes.
 
 ## Sanity Checks
 
@@ -22,10 +22,10 @@ Dataset profile:
 - Network edges: 19.
 
 Log profile:
-- Enriched trade events: 18,161.
-- SUBMISSION trade events: 15,060.
-- Deduplicated non-SUBMISSION market trades from logs: 165.
-- Pair-product rows: 100.
+- Enriched trade events: 24,169.
+- SUBMISSION trade events: 19,959.
+- Deduplicated non-SUBMISSION market trades from logs: 196.
+- Pair-product rows: 101.
 - Player rows: 8.
 - Network edges: 29.
 - Bot decision rows: 23 probe/confirm rows, plus 2 manually reviewed
@@ -102,6 +102,29 @@ The original 19 pair-probes were useful for sampling but are not trading logic:
 - Mark 38 remained fadeable: BUY from Mark 38 MO10 +5.875, SELL to Mark 38 MO10 +4.944.
 - The result rejects broad hard blocking across vouchers/VE. It supports hard Mark 14 protection on HGP, but soft skewing rather than global cancellation on vouchers and VE.
 
+`strat48_round4_hgp_hard_voucher_soft`:
+- Total profit: +12,604.748.
+- This is the best production-like strategy so far.
+- It kept the `strat47` HGP improvement: HYDROGEL_PACK +214.000.
+- It recovered most of the `strat46` voucher engine: VEV_5000 +5,608.535, VEV_5100 +4,929.449, VEV_5200 +2,875.569.
+- Remaining weaknesses: VEV_4500 -851.744, VEV_4000 -294.768, VEV_5300 -205.921, VEV_5400 -129.014.
+- Interpretation: hard protection should remain narrow and product-specific; broad hard blocking is too costly.
+
+## Motivation-Probe Results
+
+The motivation probes answer why player-aware execution matters:
+
+- Mark 14 is not merely a bad fill source; it is the clearest informed/toxic player. Mark14 exposure must be pre-emptively controlled, especially in HGP and VEV_4000.
+- Mark 01 is not safe to bait. Its convexity/VE activity should be treated as a demand signal and a no-cheap-sell warning.
+- Mark 22 is a structural voucher source, but direct SUBMISSION edge remains unproven. It is strongest as context when Mark01/14 buy vouchers from Mark22.
+- Mark 38 is fadeable, but only if the strategy avoids letting Mark14 dominate the fills.
+- Mark 55 is a good VE liquidity source when isolated; broad VE modes lose when Mark01/14 enter.
+- Mark 67 remains a sparse bullish VE signal. Selling to Mark67 is unattractive; large follow buys are not yet justified.
+- Mark 49 is a contextual VE source around Mark67, not a major standalone edge.
+
+Detailed report:
+- `phase2/round4/algo/backtests/player_profile_current/motivation_probe_findings.md`
+
 ## Working Bot Interpretation
 
 - Mark 14: strongest informed player. Follow/avoid logic is confirmed and should be developed further.
@@ -122,8 +145,8 @@ The original 19 pair-probes were useful for sampling but are not trading logic:
 Required if we want full confidence:
 - Rerun Mark 22 voucher-seller probing with wider/more persistent passive bids. Current direct sample is only 4 fills.
 - Rerun Mark 67 VE probing if the goal is specifically to validate direct Mark 67 behavior, not just profitable VE behavior around the same regime.
-- Test `strat48_round4_hgp_hard_voucher_soft`: the specific hypothesis is that HGP hard protection should preserve the `strat47` HGP improvement while recovering a meaningful share of `strat46` voucher PnL.
-- Run motivation probes that separate informed directional demand, liquidity provision, inventory dumping, and mechanical hedging.
+- Test `strat49_round4_player_anticipation`: the specific hypothesis is that learned player timing windows can improve PnL retention versus `strat48`.
+- Improve low-strike voucher handling: VEV_4000/4500 remain the weakest part of the production-like strategies.
 
 Not urgent:
 - Mark 14 follow/avoid is already confirmed by dataset and logs.

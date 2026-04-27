@@ -160,3 +160,32 @@ Operationally:
 
 The player map should not replace product alpha. It should decide whether the
 product alpha is safe to express at the current quote, side, size, and time.
+
+## Results After Motivation Probes
+
+The motivation probes have now been run. The main answers are:
+
+- Mark14 is informed/toxic. It should not be treated as ordinary liquidity.
+  Same-product and cross-product information are both present, but direct
+  exposure is dangerous.
+- Mark01 is informed convexity/VE demand. Baiting Mark01 is expensive. Use
+  Mark01 as a demand/no-cheap-sell signal, not as a direct counterparty target.
+- Mark22 is a contextual source. It matters when informed buyers such as Mark01
+  or Mark14 are buying from it; direct Mark22 edge remains unproven.
+- Mark38 is fadeable, but tests must isolate it from Mark14. Bad Mark38-probe
+  design becomes Mark14 exposure.
+- Mark55 is a VE liquidity/noise source. Direct Mark55 fills are good, but
+  broad VE strategies lose if Mark01/14 are allowed to dominate fills.
+- Mark67 is a sparse bullish VE signal. Avoid selling to it; do not chase large
+  follow buys until direct sample grows.
+- Mark49 is a contextual VE source around Mark67, with limited standalone edge.
+
+The best production-like architecture so far is:
+
+- Product alpha engine first.
+- Hard guard only where proven necessary: HGP vs Mark14.
+- Soft quote skew for vouchers and VE.
+- Fade Mark38 and trade against Mark55 only when isolated from toxic players.
+- Use Mark22/Mark49 as contextual source signals.
+- Use timing hazard windows to prepare before likely player activity, without
+  assuming future knowledge.
