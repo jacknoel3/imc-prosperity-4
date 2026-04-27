@@ -1,22 +1,52 @@
 from __future__ import annotations
 
 """
-Round 4 strat46 rewrite: Round 3 voucher/HGP engine with player-profile overlay.
+Strat47: Round 4 hard player-filter version of the strat46 engine.
 
-Base retained from Round 3:
-- HGP mean-reversion engine with zero-crossing guard.
-- VE/voucher relative-value engine from strat46.
+Why we are testing this strategy:
+- The first Round 4 player-aware strategy made strong total PnL, but the logs
+  showed that the overlay was too soft. The base Round 3 engine still crossed
+  and quoted against Mark 14 and Mark 01 too often, especially in HYDROGEL_PACK
+  and the voucher strip.
+- The previous run confirmed that Mark 38 and Mark 55 are profitable
+  counterparties to trade against, while Mark 14 and Mark 01 are toxic.
+- Mark 22 remains useful mostly as a network signal when Mark 01/14 buy
+  vouchers from Mark 22. Direct SUBMISSION fills against Mark 22 were not strong
+  enough to treat Mark 22 alone as guaranteed cheap convexity.
+- Mark 67 still has a thin direct sample, but the evidence says that selling VE
+  to Mark 67 is dangerous; after Mark 67 buys, we should avoid selling and may
+  follow with tiny buys.
 
-Round 4 additions from buyer/seller profiling:
-- Mark 14 is treated as informed flow. Follow/avoid its direction on HGP,
-  VEV_4000, and VE.
-- Mark 38 is treated as fadeable flow, especially HGP and low vouchers.
-- Mark 01 buying means do not sell convexity cheaply; lean with voucher/VE demand.
-- Mark 22 selling vouchers is treated as a convexity accumulation signal, but
-  only passively and with soft caps.
-- Mark 55/49 are treated as VE liquidity/noise sources.
-- Mark 67 buying VE is treated as a small bullish signal, pending one more
-  direct confirmation run.
+How this strategy works:
+- It keeps the Round 3 strat46 core: HGP mean reversion plus the voucher/VE
+  relative-value engine.
+- It adds temporary hard guards from observed buyer/seller flow:
+  * If Mark 14 sells a product, block new buys in that product. This is most
+    important for HGP, where the previous strategy lost heavily after buying
+    from Mark 14.
+  * If Mark 14 buys a product, block new sells in that product so we do not
+    passively sell into informed demand.
+  * If Mark 01 buys VE/vouchers, block new sells in those products.
+  * If Mark 67 buys VE, block new VE sells and allow tiny follow-buy overlays.
+  * If Mark 38 buys, fade with a short bias; if Mark 38 sells, fade with a long
+    bias. This signal is strengthened versus strat46_round4_player_profile.
+  * If Mark 55/49 sell VE, lean long VE; if Mark 55 buys VE, lean short VE.
+  * If Mark 22 sells vouchers only to Mark 01 or Mark 14, register a confirmed
+    convexity-source signal. Mark 22 alone no longer creates a strong signal.
+- Hard guards still allow inventory reduction. For example, a no-buy guard will
+  block new long exposure, but if the strategy is short it may buy enough to
+  reduce that short.
+
+What the logs should reveal:
+- Whether strict Mark 14/Mark 01 avoidance reduces negative markout without
+  killing the voucher PnL engine.
+- Whether HGP drawdown improves once Mark 14 sell-flow blocks HGP buys.
+- Whether Mark 38 and Mark 55 remain profitable when embedded in a full
+  production-like strategy.
+- Whether Mark 22 should remain a contextual network signal instead of a direct
+  standalone counterparty signal.
+- Whether Mark 67 VE buy-flow is better handled as "do not sell/follow tiny"
+  rather than a symmetric VE market-making opportunity.
 """
 
 import json
@@ -482,6 +512,11 @@ class Trader:
     }
     CORE_BASKET = ("VEV_5000", "VEV_5100", "VEV_5200", "VEV_5300", "VEV_5400")
     PLAYER_WINDOW = 7000
+    HARD_GUARD_WINDOW = 9000
+    MARK14_HGP_GUARD_WINDOW = 14000
+    MARK01_GUARD_WINDOW = 10000
+    MARK67_GUARD_WINDOW = 10000
+    MARK22_CONTEXT_WINDOW = 8000
     FLOW_MAX_ABS = 3.0
     FLOW_FAIR_SCALE = {
         VE: 1.8,
@@ -528,6 +563,7 @@ class Trader:
         self._trade_noarb_lower_bound(state, cache, om)
         self._delta_hedge_passive(state, cache, om)
 
+        self._filter_result_for_hard_guards(result, cache, state, timestamp)
         cache["t"] = timestamp
         return result, 0, json.dumps(cache, separators=(",", ":"))
 
@@ -548,30 +584,46 @@ class Trader:
 
     def _score_player_trade(self, cache: Dict[str, Any], product: str, buyer: str, seller: str, timestamp: int) -> None:
         if buyer == "Mark 14":
-            self._register_flow(cache, product, +2.6, timestamp, "FOLLOW_MARK14_BUY")
+            self._register_flow(cache, product, +2.8, timestamp, "FOLLOW_MARK14_BUY")
+            self._register_guard(
+                cache, product, "SELL", timestamp,
+                self.MARK14_HGP_GUARD_WINDOW if product == HGP_SYMBOL else self.HARD_GUARD_WINDOW,
+                "NO_SELL_INTO_MARK14_BUY",
+            )
         if seller == "Mark 14":
-            self._register_flow(cache, product, -2.6, timestamp, "FOLLOW_MARK14_SELL")
+            self._register_flow(cache, product, -2.8, timestamp, "FOLLOW_MARK14_SELL")
+            self._register_guard(
+                cache, product, "BUY", timestamp,
+                self.MARK14_HGP_GUARD_WINDOW if product == HGP_SYMBOL else self.HARD_GUARD_WINDOW,
+                "NO_BUY_FROM_MARK14_SELL",
+            )
 
         if buyer == "Mark 38":
-            self._register_flow(cache, product, -2.1, timestamp, "FADE_MARK38_BUY")
+            self._register_flow(cache, product, -2.9, timestamp, "FADE_MARK38_BUY")
         if seller == "Mark 38":
-            self._register_flow(cache, product, +2.1, timestamp, "FADE_MARK38_SELL")
+            self._register_flow(cache, product, +2.9, timestamp, "FADE_MARK38_SELL")
 
         if product in self.VOUCHERS or product == self.VE:
             if buyer == "Mark 01":
-                self._register_flow(cache, product, +1.2, timestamp, "LEAN_WITH_MARK01_BUY")
+                self._register_flow(cache, product, +1.6, timestamp, "LEAN_WITH_MARK01_BUY")
+                self._register_guard(cache, product, "SELL", timestamp, self.MARK01_GUARD_WINDOW, "NO_SELL_INTO_MARK01_BUY")
             if seller == "Mark 01":
-                self._register_flow(cache, product, -1.0, timestamp, "LEAN_WITH_MARK01_SELL")
+                self._register_flow(cache, product, -1.2, timestamp, "LEAN_WITH_MARK01_SELL")
+                self._register_guard(cache, product, "BUY", timestamp, self.MARK01_GUARD_WINDOW, "NO_BUY_FROM_MARK01_SELL")
 
         if product in {"VEV_5200", "VEV_5300", "VEV_5400", "VEV_5500", "VEV_6000", "VEV_6500"}:
-            if seller == "Mark 22":
-                self._register_flow(cache, product, +1.0, timestamp, "MARK22_VOUCHER_SOURCE")
+            if seller == "Mark 22" and buyer in {"Mark 01", "Mark 14"}:
+                self._register_mark22_context(cache, product, timestamp)
+                self._register_flow(cache, product, +1.4, timestamp, "CONFIRMED_MARK22_VOUCHER_SOURCE")
+            elif seller == "Mark 22" and self._has_mark22_context(cache, product, timestamp):
+                self._register_flow(cache, product, +0.6, timestamp, "CONTEXTUAL_MARK22_VOUCHER_SOURCE")
             if buyer == "Mark 22":
                 self._register_flow(cache, product, -0.4, timestamp, "MARK22_RARE_BUY")
 
         if product == self.VE:
             if buyer == "Mark 67":
-                self._register_flow(cache, product, +1.4, timestamp, "MARK67_VE_BUY")
+                self._register_flow(cache, product, +1.8, timestamp, "MARK67_VE_BUY")
+                self._register_guard(cache, product, "SELL", timestamp, self.MARK67_GUARD_WINDOW, "NO_SELL_INTO_MARK67_BUY")
             if seller == "Mark 67":
                 self._register_flow(cache, product, -0.7, timestamp, "MARK67_VE_SELL")
             if buyer == "Mark 55":
@@ -590,6 +642,34 @@ class Trader:
             bias = old_bias + bias * 0.35
         bias = max(-self.FLOW_MAX_ABS, min(self.FLOW_MAX_ABS, bias))
         flows[product] = {"bias": round(bias, 4), "expires": timestamp + self.PLAYER_WINDOW, "reason": reason}
+
+    def _register_guard(self, cache: Dict[str, Any], product: str, side: str, timestamp: int, window: int, reason: str) -> None:
+        """Register a hard temporary block on new exposure.
+
+        side is the side the strategy is not allowed to initiate. A BUY guard
+        blocks new long exposure; a SELL guard blocks new short/sell exposure.
+        Inventory-reducing orders are still allowed by the final result filter.
+        """
+        guards = cache.setdefault("guards", {})
+        item = guards.setdefault(product, {})
+        key = "no_buy_until" if side == "BUY" else "no_sell_until"
+        reason_key = "no_buy_reason" if side == "BUY" else "no_sell_reason"
+        item[key] = max(int(item.get(key, -1)), timestamp + window)
+        item[reason_key] = reason
+
+    def _register_mark22_context(self, cache: Dict[str, Any], product: str, timestamp: int) -> None:
+        ctx = cache.setdefault("mark22_context", {})
+        ctx[product] = timestamp + self.MARK22_CONTEXT_WINDOW
+
+    def _has_mark22_context(self, cache: Dict[str, Any], product: str, timestamp: int) -> bool:
+        return int(cache.get("mark22_context", {}).get(product, -1)) >= timestamp
+
+    def _guard_blocks(self, cache: Dict[str, Any], product: str, side: str, timestamp: int) -> bool:
+        item = cache.get("guards", {}).get(product, {})
+        if not isinstance(item, dict):
+            return False
+        key = "no_buy_until" if side == "BUY" else "no_sell_until"
+        return int(item.get(key, -1)) >= timestamp
 
     def _flow_bias(self, cache: Dict[str, Any], product: str) -> float:
         timestamp = int(cache.get("now", 0))
@@ -612,6 +692,14 @@ class Trader:
             buy_size = int(round(buy_size * max(0.25, 1.0 - 0.22 * abs(bias))))
         return max(0, buy_size), max(0, sell_size)
 
+    def _apply_hard_guard_sizing(self, cache: Dict[str, Any], product: str, buy_size: int, sell_size: int) -> Tuple[int, int]:
+        timestamp = int(cache.get("now", 0))
+        if self._guard_blocks(cache, product, "BUY", timestamp):
+            buy_size = 0
+        if self._guard_blocks(cache, product, "SELL", timestamp):
+            sell_size = 0
+        return max(0, buy_size), max(0, sell_size)
+
     def _trade_player_overlay(self, state: TradingState, cache: Dict[str, Any], om: OrderManager, timestamp: int) -> None:
         cooldown = cache.setdefault("player_overlay_cd", {})
         for product in self.ACTIVE_PLAYER_PRODUCTS:
@@ -628,10 +716,10 @@ class Trader:
             qty = 2 if product in (self.VE, "VEV_4000", "VEV_4500") else 3
             if "MARK22" in reason:
                 qty = 2
-            if bias > 0 and pos < soft:
+            if bias > 0 and pos < soft and not self._guard_blocks(cache, product, "BUY", timestamp):
                 om.add(product, ask, min(qty, soft - pos))
                 cooldown[product] = timestamp + 900
-            elif bias < 0 and pos > -soft:
+            elif bias < 0 and pos > -soft and not self._guard_blocks(cache, product, "SELL", timestamp):
                 om.add(product, bid, -min(qty, pos + soft))
                 cooldown[product] = timestamp + 900
 
@@ -650,16 +738,57 @@ class Trader:
         sent_buy = sum(o.quantity for o in orders if o.quantity > 0)
         sent_sell = sum(-o.quantity for o in orders if o.quantity < 0)
         qty = 4
-        if bias > 0:
+        if bias > 0 and not self._guard_blocks(cache, HGP_SYMBOL, "BUY", timestamp):
             cap = max(0, HGP_POSITION_LIMIT - position - sent_buy)
             if cap > 0:
                 orders.append(Order(HGP_SYMBOL, int(ba), min(qty, cap)))
                 cooldown[HGP_SYMBOL] = timestamp + 900
-        else:
+        elif bias < 0 and not self._guard_blocks(cache, HGP_SYMBOL, "SELL", timestamp):
             cap = max(0, HGP_POSITION_LIMIT + position - sent_sell)
             if cap > 0:
                 orders.append(Order(HGP_SYMBOL, int(bb), -min(qty, cap)))
                 cooldown[HGP_SYMBOL] = timestamp + 900
+
+    def _filter_result_for_hard_guards(
+        self,
+        result: Dict[str, List[Order]],
+        cache: Dict[str, Any],
+        state: TradingState,
+        timestamp: int,
+    ) -> None:
+        """Remove orders that violate hard player guards while allowing flattening.
+
+        This final pass catches every order source, including HGP active orders,
+        no-arb lower-bound trades, delta hedge orders, and player overlays.
+        """
+        for product, orders in list(result.items()):
+            if not orders:
+                continue
+            no_buy = self._guard_blocks(cache, product, "BUY", timestamp)
+            no_sell = self._guard_blocks(cache, product, "SELL", timestamp)
+            if not no_buy and not no_sell:
+                continue
+            virtual_pos = int(state.position.get(product, 0))
+            filtered: List[Order] = []
+            for order in orders:
+                qty = int(order.quantity)
+                if qty > 0 and no_buy:
+                    # Buying is still allowed if it reduces an existing short.
+                    allowed = min(qty, max(0, -virtual_pos))
+                    if allowed > 0:
+                        filtered.append(Order(order.symbol, order.price, allowed))
+                        virtual_pos += allowed
+                    continue
+                if qty < 0 and no_sell:
+                    # Selling is still allowed if it reduces an existing long.
+                    allowed = min(-qty, max(0, virtual_pos))
+                    if allowed > 0:
+                        filtered.append(Order(order.symbol, order.price, -allowed))
+                        virtual_pos -= allowed
+                    continue
+                filtered.append(order)
+                virtual_pos += qty
+            result[product] = filtered
 
     # ----------- HGP -----------
 
@@ -832,6 +961,7 @@ class Trader:
             sell_size = 0
             buy_size = int(buy_size * 1.4)
         buy_size, sell_size = self._apply_flow_sizing(cache, self.VE, buy_size, sell_size)
+        buy_size, sell_size = self._apply_hard_guard_sizing(cache, self.VE, buy_size, sell_size)
         if buy_size > 0 and pos < soft and buy_px <= fair - edge:
             om.add(self.VE, buy_px, min(buy_size, soft - pos))
         if sell_size > 0 and pos > -soft and sell_px >= fair + edge:
@@ -956,6 +1086,7 @@ class Trader:
                 sell_size = int(sell_size * 1.20)
                 buy_size = max(1, int(buy_size * 0.70)) if buy_size > 0 else 0
         buy_size, sell_size = self._apply_flow_sizing(cache, product, buy_size, sell_size)
+        buy_size, sell_size = self._apply_hard_guard_sizing(cache, product, buy_size, sell_size)
         # EDA voucher_maker_taker_fills: VEV_5400/5500 = 0% fills_at_ask. Bots only sell.
         # Posting passive ask is wasted capacity. Keep only as inventory exit when long.
         if product in ("VEV_5400", "VEV_5500") and pos <= 0:
