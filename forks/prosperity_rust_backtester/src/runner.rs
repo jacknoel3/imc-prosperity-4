@@ -307,10 +307,8 @@ pub fn run_backtest(request: &RunRequest) -> Result<RunOutput> {
             if let Some(stable_mark) = resolve_stable_mark(snapshot) {
                 last_stable_mark_by_product.insert(product.clone(), stable_mark);
             }
-            let mark_price = resolve_mark_price(
-                snapshot,
-                last_stable_mark_by_product.get(product).copied(),
-            );
+            let mark_price =
+                resolve_mark_price(snapshot, last_stable_mark_by_product.get(product).copied());
             if let Some(price) = mark_price {
                 mark_prices.insert(product.clone(), price);
             }
@@ -321,7 +319,9 @@ pub fn run_backtest(request: &RunRequest) -> Result<RunOutput> {
             pnl_by_product.insert(product.clone(), pnl);
 
             if need_submission_log {
-                activity_rows.push(format_activity_row(tick, product, snapshot, mark_price, pnl));
+                activity_rows.push(format_activity_row(
+                    tick, product, snapshot, mark_price, pnl,
+                ));
             }
         }
 
@@ -1053,7 +1053,11 @@ fn sweep_synthetic_buy_into_liquidity(
                     timestamp,
                 });
                 adjust_position(position, symbol, -fill);
-                adjust_cash(cash_by_product, symbol, execution_price as f64 * fill as f64);
+                adjust_cash(
+                    cash_by_product,
+                    symbol,
+                    execution_price as f64 * fill as f64,
+                );
                 resting_asks[index].quantity -= fill;
                 *synthetic_remaining -= fill;
             }
@@ -2008,10 +2012,8 @@ mod tests {
 
     #[test]
     fn product_specific_limits_allow_positions_up_to_cap() {
-        let position = IndexMap::from([
-            ("EMERALDS".to_string(), 75),
-            ("TOMATOES".to_string(), -75),
-        ]);
+        let position =
+            IndexMap::from([("EMERALDS".to_string(), 75), ("TOMATOES".to_string(), -75)]);
         let orders_by_symbol = IndexMap::from([
             (
                 "EMERALDS".to_string(),
@@ -2040,10 +2042,8 @@ mod tests {
 
     #[test]
     fn product_specific_limits_reject_orders_beyond_cap() {
-        let position = IndexMap::from([
-            ("EMERALDS".to_string(), 75),
-            ("TOMATOES".to_string(), -75),
-        ]);
+        let position =
+            IndexMap::from([("EMERALDS".to_string(), 75), ("TOMATOES".to_string(), -75)]);
         let orders_by_symbol = IndexMap::from([
             (
                 "EMERALDS".to_string(),

@@ -88,7 +88,7 @@ def cli(
         str,
         Option(
             "--r3-stress",
-            help="Optional Round 3 stress profile: none, conservative, or adverse.",
+            help="Optional Round 3 stress profile: none, conservative, oos, or adverse.",
         ),
     ] = "none",
     r3_spread_multiplier: Annotated[
@@ -114,6 +114,37 @@ def cli(
     r3_surface_tilt_std: Annotated[
         Optional[float],
         Option("--r3-surface-tilt-std", help="Override Round 3 option-surface tilt standard deviation in ticks."),
+    ] = None,
+    r4_stress: Annotated[
+        str,
+        Option(
+            "--r4-stress",
+            help="Optional Round 4 stress profile: none, conservative, oos, or adverse.",
+        ),
+    ] = "oos",
+    r4_spread_multiplier: Annotated[
+        Optional[float],
+        Option("--r4-spread-multiplier", help="Override Round 4 stress spread multiplier; values below 1 are clamped to 1."),
+    ] = None,
+    r4_depth_multiplier: Annotated[
+        Optional[float],
+        Option("--r4-depth-multiplier", help="Override Round 4 stress book-depth multiplier."),
+    ] = None,
+    r4_trade_keep_probability: Annotated[
+        Optional[float],
+        Option("--r4-trade-keep-probability", help="Override Round 4 named public-trade replay keep probability."),
+    ] = None,
+    r4_spot_shift_std: Annotated[
+        Optional[float],
+        Option("--r4-spot-shift-std", help="Override Round 4 coherent spot-shift standard deviation in ticks."),
+    ] = None,
+    r4_surface_shift_std: Annotated[
+        Optional[float],
+        Option("--r4-surface-shift-std", help="Override Round 4 coherent option-surface shift standard deviation in ticks."),
+    ] = None,
+    r4_surface_tilt_std: Annotated[
+        Optional[float],
+        Option("--r4-surface-tilt-std", help="Override Round 4 option-surface tilt standard deviation in ticks."),
     ] = None,
     version: Annotated[
         bool,
@@ -155,6 +186,13 @@ def cli(
         r3_spot_shift_std=r3_spot_shift_std,
         r3_surface_shift_std=r3_surface_shift_std,
         r3_surface_tilt_std=r3_surface_tilt_std,
+        r4_stress=r4_stress,
+        r4_spread_multiplier=r4_spread_multiplier,
+        r4_depth_multiplier=r4_depth_multiplier,
+        r4_trade_keep_probability=r4_trade_keep_probability,
+        r4_spot_shift_std=r4_spot_shift_std,
+        r4_surface_shift_std=r4_surface_shift_std,
+        r4_surface_tilt_std=r4_surface_tilt_std,
     )
 
     total_stats = dashboard["overall"]["totalPnl"]

@@ -8,9 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Competition Context
 - **Competition**: IMC Prosperity 4, 16 days, 5 rounds — currency: XIRECs
 - **Goal**: Max PnL, top global rank
-- **Round 3 started**: April 24, 2026
-- **Current phase**: Round 3 — "Gloves Off" (planet: Solvenar) — Phase 2 / GOAT begins
-- **Leaderboard reset**: all teams start Round 3 at 0 PnL — Phase 1 results archived
+- **Round 3**: April 24–26, 2026 — "Gloves Off" (planet: Solvenar) — archived
+- **Round 4 started**: April 27, 2026
+- **Current phase**: Round 4 — "The More The Merrier" — Phase 2 / GOAT continues
 - **Round duration**: 48 hours (Rounds 3–5 are shorter than R1/R2)
 
 ## Repo Layout
@@ -116,27 +116,62 @@ Use this workflow every round so research, implementation, and validation stay a
   - no overfit thresholds
   - no product included unless we can clearly explain why it should make money
 
-## Current Round: Round 3
+## Current Round: Round 4 — "The More The Merrier"
 
 **Submission file: `trader.py` at repo root**
 
 | Product | Type | Limit | Notes |
 |---|---|---|---|
-| HYDROGEL_PACK | Delta-1 spot | 200 | Standard MM product — run EDA to confirm FV process |
-| VELVETFRUIT_EXTRACT | Delta-1 spot | 200 | Underlying for vouchers — price drives option value |
-| VEV_4000 … VEV_6500 | Call option (×10 strikes) | 300 each | Black-Scholes pricing; TTE=5 days at R3 start |
+| `HYDROGEL_PACK` | Delta-1 spot | 200 | Same as R3 — FV≈10,000, contrarian OBI |
+| `VELVETFRUIT_EXTRACT` | Delta-1 spot | 200 | Same as R3 — FV≈5,250, option underlying |
+| `VEV_4000` … `VEV_6500` | Call option (×10 strikes) | 300 each | **TTE=4 days** in R4; recompute BS fair values live |
 
 **Voucher strikes**: 4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500
-**TTE timeline**: TTE=8d (tutorial) → 7d (R1) → 6d (R2) → **5d (R3)** → 4d (R4) → 3d (R5)
+**TTE timeline**: TTE=8d (tutorial) → 7d (R1) → 6d (R2) → 5d (R3) → **4d (R4)** → 3d (R5)
 
-## Manual Trading — Celestial Gardeners' Guild (Round 3)
+**Key R4 addition — counterparty IDs**: `Trade.buyer` and `Trade.seller` are now populated with participant names. R1–R3 had these as `None`. Use these to identify systematic bots, signal-copy informed traders, and filter out noise flow.
+
+```python
+class Trade:
+    def __init__(self, symbol, price, quantity, buyer=None, seller=None, timestamp=0):
+        self.symbol = symbol
+        self.price: int = price
+        self.quantity: int = quantity
+        self.buyer = buyer      # now populated — participant name or bot ID
+        self.seller = seller    # now populated — participant name or bot ID
+        self.timestamp = timestamp
+```
+
+## Manual Trading — Aether Crystal (Round 4)
+
+See `.claude/rules/products/aether_crystal.md` for full detail. Summary:
+
+- Trade `AETHER_CRYSTAL` (underlying) + vanilla calls/puts (2W, 3W expiry) + exotic derivatives
+- **Exotics**: Chooser option (3W expiry, choose call/put after 2W), Binary Put (all-or-nothing), Knock-Out Put (worthless if barrier breached before expiry)
+- Underlying modeled as GBM: zero risk-neutral drift, σ=**251% annualized**, 4 discrete steps/day, 252 trading days/year
+- PnL averaged over **100 simulations**; contract size=**3000** (scales PnL proportionally)
+- "2 weeks" = 10 trading days = 40 steps; "3 weeks" = 15 trading days = 60 steps
+- No continuous barrier monitoring — knock-out only checks at discrete grid points
+- Hold till expiry — no intraday trading; submit orders once in Manual Challenge Overview window
+
+```python
+TRADING_DAYS_PER_YEAR = 252
+STEPS_PER_DAY = 4
+STEPS_PER_YEAR = TRADING_DAYS_PER_YEAR * STEPS_PER_DAY
+
+def weeks_to_years(weeks: float) -> float:
+    return (weeks * 5) / TRADING_DAYS_PER_YEAR
+
+def steps_for_weeks(weeks: float) -> int:
+    return int(round(weeks * 5 * STEPS_PER_DAY))
+```
+
+## Manual Trading — Celestial Gardeners' Guild (Round 3, archived)
 - Submit **two bids** (b1, b2) against counterparties with reserve prices uniform on {670, 675, …, 920} (increment 5)
 - All acquired Bio-Pods auto-sell at **920** next trading day
 - **Bid 1**: trade at b1 with any counterparty whose reserve ≤ b1
 - **Bid 2**: trade at b2 if reserve ≤ b2 AND b2 ≥ mean of all players' b2 — else penalty factor `((920 - avg_b2) / (920 - b2))^3` applied
-- Optimal b1: **just above 670** (capture all counterparties, minimize cost) → set b1 = 671 or 675
-- Optimal b2: game-theory — bid just above expected avg_b2; without data on other teams, anchor near 800–850
-- Submit via Manual Challenge Overview window; last submission before deadline is locked
+- Optimal b1: **just above 670** → set b1 = 671 or 675; Optimal b2: anchor near 800–850
 
 ## Data Findings Summary (Round 3)
 - **HYDROGEL_PACK**: FV≈10,000 (stationary). Spread mean 15.7. ACF lag-1=-0.129 (mean-reverting). OBI is **CONTRARIAN** (r=-0.327) — fade imbalance, do NOT follow it. ~337 trades/day, avg qty 4. Limit=200.
@@ -149,7 +184,7 @@ Use this workflow every round so research, implementation, and validation stay a
 ## Key Rules & References
 - See @.claude/rules/submission.md — hard constraints, never break
 - See @.claude/rules/round-roadmap.md — future rounds planning
-- See @.claude/rules/products/ — per-product strategy details (R3: hydrogel_pack.md, velvetfruit_extract.md, velvetfruit_extract_voucher.md)
+- See @.claude/rules/products/ — per-product strategy details (R3/R4 algo: hydrogel_pack.md, velvetfruit_extract.md, velvetfruit_extract_voucher.md; R4 manual: aether_crystal.md)
 - See @.claude/rules/agents-gather-protocol.md — trigger phrase `agents gather <idea>` launches every agent in `.claude/agents/` in parallel and appends the reasoning record to `shared_reasoning.md` (auto-scales; new agents join automatically)
 - See @.claude/rules/quant-council-guide.md — full explanation of the agents gather protocol, roster, phases, and challenger review
 - See `misc/ALGO_STRUCTURE.md` — exchange mechanics, TradingState API, position limit rules
@@ -184,4 +219,5 @@ Use this workflow every round so research, implementation, and validation stay a
 - Hardcode historical prices without runtime fallback
 - Modify datamodel.py
 - Use market orders on wide-spread products (same rule as IPR — crossing spread destroys edge)
-- Use Black-Scholes without confirming underlying volatility from actual R3 data
+- Use Black-Scholes without confirming underlying volatility from actual data (R3 sigma=0.22 for voucher quoting, R4 Aether Crystal sigma=2.51)
+- Use sigma=0.342 (realized vol) in BS for voucher quoting — that gives prices 15–30 ticks above market

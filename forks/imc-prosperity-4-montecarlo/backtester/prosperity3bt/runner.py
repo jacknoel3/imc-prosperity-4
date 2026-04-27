@@ -378,4 +378,5 @@ def run_backtest(
         enforce_limits(state, data, orders, sandbox_row)
         match_orders(state, data, orders, result, trade_matching_mode)
 
+    result.final_position = dict(state.position)
     return result

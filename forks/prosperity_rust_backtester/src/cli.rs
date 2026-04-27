@@ -30,12 +30,14 @@ struct Args {
     day: Option<i64>,
     #[arg(long = "run-id")]
     run_id: Option<String>,
-    #[arg(long = "trade-match-mode", default_value = "all")]
-    trade_match_mode: String,
-    #[arg(long = "queue-penetration", default_value_t = 1.0)]
-    queue_penetration: f64,
-    #[arg(long = "price-slippage-bps", default_value_t = 0.0)]
-    price_slippage_bps: f64,
+    #[arg(long = "trade-match-mode")]
+    trade_match_mode: Option<String>,
+    #[arg(long = "queue-penetration")]
+    queue_penetration: Option<f64>,
+    #[arg(long = "price-slippage-bps")]
+    price_slippage_bps: Option<f64>,
+    #[arg(long = "calibration", value_enum, default_value_t = CalibrationProfile::Official)]
+    calibration: CalibrationProfile,
     #[arg(long = "output-root")]
     output_root: Option<PathBuf>,
     #[arg(long, default_value_t = false)]
@@ -74,11 +76,7 @@ pub fn run() -> Result<()> {
     }
     let mut rows = Vec::with_capacity(plans.len());
     let mut outputs = Vec::with_capacity(plans.len());
-    let matching = MatchingConfig {
-        trade_match_mode: args.trade_match_mode.clone(),
-        queue_penetration: args.queue_penetration,
-        price_slippage_bps: args.price_slippage_bps,
-    };
+    let matching = resolve_matching_config(&args);
     let artifact_mode = resolve_artifact_mode(&args);
     let (persist, write_metrics, write_bundle, write_submission_log, materialize_artifacts) =
         artifact_mode_settings(artifact_mode);
@@ -108,11 +106,7 @@ pub fn run() -> Result<()> {
                     output.run_dir.display()
                 )
             })?;
-            format!(
-                "{}/{}-*",
-                display_path(flat_dir),
-                plan.artifact_prefix
-            )
+            format!("{}/{}-*", display_path(flat_dir), plan.artifact_prefix)
         } else {
             display_path(&output.run_dir)
         };
@@ -151,6 +145,8 @@ pub fn run() -> Result<()> {
         &dataset,
         artifact_mode,
         args.products,
+        args.calibration,
+        &matching,
         bundle_dir.as_deref(),
         flat_layout,
     );
@@ -220,6 +216,22 @@ enum ArtifactMode {
     Full,
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq, ValueEnum)]
+enum CalibrationProfile {
+    /// Match the legacy/open-source backtester defaults.
+    Official,
+    /// Penalize passive fills while keeping marketable order mechanics usable.
+    Conservative,
+    /// Stress-test thin queues and adverse selection.
+    Harsh,
+    /// Only count fills against visible book liquidity; ignore public trade-tape fills.
+    CrossOnly,
+    /// Round 4 default stress profile: counterparty data is useful, but hidden-day fills are noisy.
+    Round4,
+    /// Round 4 OOS stress profile, tuned for the Round 3 1k-to-10k scaling failure mode.
+    Round4Oos,
+}
+
 fn resolve_artifact_mode(args: &Args) -> ArtifactMode {
     if let Some(mode) = args.artifact_mode {
         return mode;
@@ -228,6 +240,52 @@ fn resolve_artifact_mode(args: &Args) -> ArtifactMode {
         return ArtifactMode::Full;
     }
     ArtifactMode::Submission
+}
+
+fn resolve_matching_config(args: &Args) -> MatchingConfig {
+    let mut config = match args.calibration {
+        CalibrationProfile::Official => MatchingConfig {
+            trade_match_mode: "all".to_string(),
+            queue_penetration: 1.0,
+            price_slippage_bps: 0.0,
+        },
+        CalibrationProfile::Conservative => MatchingConfig {
+            trade_match_mode: "worse".to_string(),
+            queue_penetration: 0.50,
+            price_slippage_bps: 2.0,
+        },
+        CalibrationProfile::Harsh => MatchingConfig {
+            trade_match_mode: "worse".to_string(),
+            queue_penetration: 0.25,
+            price_slippage_bps: 5.0,
+        },
+        CalibrationProfile::CrossOnly => MatchingConfig {
+            trade_match_mode: "none".to_string(),
+            queue_penetration: 0.0,
+            price_slippage_bps: 1.0,
+        },
+        CalibrationProfile::Round4 => MatchingConfig {
+            trade_match_mode: "worse".to_string(),
+            queue_penetration: 0.35,
+            price_slippage_bps: 3.0,
+        },
+        CalibrationProfile::Round4Oos => MatchingConfig {
+            trade_match_mode: "worse".to_string(),
+            queue_penetration: 0.20,
+            price_slippage_bps: 6.0,
+        },
+    };
+
+    if let Some(mode) = &args.trade_match_mode {
+        config.trade_match_mode = mode.clone();
+    }
+    if let Some(queue_penetration) = args.queue_penetration {
+        config.queue_penetration = queue_penetration;
+    }
+    if let Some(price_slippage_bps) = args.price_slippage_bps {
+        config.price_slippage_bps = price_slippage_bps;
+    }
+    config
 }
 
 fn artifact_mode_settings(mode: ArtifactMode) -> (bool, bool, bool, bool, bool) {
@@ -307,7 +365,10 @@ fn build_run_plan(
     Ok((run_id_seed, plans))
 }
 
-fn build_standard_plans(targets: Vec<(PathBuf, Option<i64>)>, run_id_seed: &str) -> Vec<PlannedRun> {
+fn build_standard_plans(
+    targets: Vec<(PathBuf, Option<i64>)>,
+    run_id_seed: &str,
+) -> Vec<PlannedRun> {
     let multiple_runs = targets.len() > 1;
     targets
         .into_iter()
@@ -364,7 +425,9 @@ fn flush_carry_buffer(
     }
 
     if carry_buffer.len() == 1 {
-        let (dataset_file, day) = carry_buffer.pop().expect("carry buffer should have one item");
+        let (dataset_file, day) = carry_buffer
+            .pop()
+            .expect("carry buffer should have one item");
         plans.push(PlannedRun {
             metadata_overrides: Default::default(),
             ..build_single_plan(dataset_file, day, "", false)
@@ -461,7 +524,8 @@ fn carry_recorded_dataset_path(targets: &[(PathBuf, Option<i64>)]) -> String {
 
 fn carry_dataset_id(targets: &[(PathBuf, Option<i64>)]) -> String {
     let first_path = &targets[0].0;
-    let base = dataset_container_label(first_path).unwrap_or_else(|| dataset_stem_label(first_path));
+    let base =
+        dataset_container_label(first_path).unwrap_or_else(|| dataset_stem_label(first_path));
     sanitize_identifier(&format!("{base}-carry"))
 }
 
@@ -1202,6 +1266,8 @@ fn print_summary(
     dataset: &ResolvedDataset,
     artifact_mode: ArtifactMode,
     products: ProductDisplayMode,
+    calibration: CalibrationProfile,
+    matching: &MatchingConfig,
     bundle_dir: Option<&str>,
     flat_layout: bool,
 ) {
@@ -1220,6 +1286,18 @@ fn print_summary(
         }
     );
     println!("mode: fast");
+    println!(
+        "calibration: {:?} [match={}, queue={:.2}, slippage_bps={:.2}]",
+        calibration,
+        matching.trade_match_mode,
+        matching.queue_penetration,
+        matching.price_slippage_bps,
+    );
+    if calibration == CalibrationProfile::Round4Oos {
+        println!(
+            "oos_note: harsher Round 4 preset; use this to sanity-check 1k edges that may not scale to 10k."
+        );
+    }
     println!(
         "artifacts: {}",
         match artifact_mode {
@@ -1272,15 +1350,27 @@ fn render_day(day: Option<i64>) -> String {
 
 fn reset_flat_output_dir(flat_dir: &Path) -> Result<()> {
     if flat_dir.is_dir() {
-        fs::remove_dir_all(flat_dir)
-            .with_context(|| format!("failed to replace flat output directory {}", flat_dir.display()))?;
+        fs::remove_dir_all(flat_dir).with_context(|| {
+            format!(
+                "failed to replace flat output directory {}",
+                flat_dir.display()
+            )
+        })?;
     }
-    fs::create_dir_all(flat_dir)
-        .with_context(|| format!("failed to create flat output directory {}", flat_dir.display()))?;
+    fs::create_dir_all(flat_dir).with_context(|| {
+        format!(
+            "failed to create flat output directory {}",
+            flat_dir.display()
+        )
+    })?;
     Ok(())
 }
 
-fn write_flat_run_artifacts(flat_dir: &Path, prefix: &str, output: &crate::model::RunOutput) -> Result<()> {
+fn write_flat_run_artifacts(
+    flat_dir: &Path,
+    prefix: &str,
+    output: &crate::model::RunOutput,
+) -> Result<()> {
     let artifacts = output
         .artifacts
         .as_ref()
@@ -1288,7 +1378,12 @@ fn write_flat_run_artifacts(flat_dir: &Path, prefix: &str, output: &crate::model
 
     write_prefixed_artifact(flat_dir, prefix, "metrics.json", &artifacts.metrics_json)?;
     write_prefixed_artifact(flat_dir, prefix, "bundle.json", &artifacts.bundle_json)?;
-    write_prefixed_artifact(flat_dir, prefix, "submission.log", &artifacts.submission_log)?;
+    write_prefixed_artifact(
+        flat_dir,
+        prefix,
+        "submission.log",
+        &artifacts.submission_log,
+    )?;
     write_prefixed_artifact(flat_dir, prefix, "activity.csv", &artifacts.activity_csv)?;
     write_prefixed_artifact(
         flat_dir,
@@ -1301,7 +1396,12 @@ fn write_flat_run_artifacts(flat_dir: &Path, prefix: &str, output: &crate::model
     Ok(())
 }
 
-fn write_prefixed_artifact(flat_dir: &Path, prefix: &str, file_name: &str, bytes: &[u8]) -> Result<()> {
+fn write_prefixed_artifact(
+    flat_dir: &Path,
+    prefix: &str,
+    file_name: &str,
+    bytes: &[u8],
+) -> Result<()> {
     if bytes.is_empty() {
         return Ok(());
     }

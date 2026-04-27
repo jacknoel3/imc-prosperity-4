@@ -1,6 +1,6 @@
 # IMC Prosperity 4 Monte Carlo Backtester
 
-Rust-backed Monte Carlo backtesting for IMC Prosperity 4 tutorial-round strategies.
+Monte Carlo backtesting for IMC Prosperity 4 strategies.
 
 This repo gives you:
 
@@ -8,12 +8,14 @@ This repo gives you:
 - a local dashboard for PnL distributions, profitability, stability, and path bands
 - a legacy replay CLI for historical CSV playback
 - tutorial-round simulation models for `EMERALDS` and `TOMATOES`
+- Round 3 and Round 4 block-bootstrap models for the Prosperity 4 products
 
 You do not need to rewrite your trader for Monte Carlo mode. If your file already exposes a normal `Trader.run(state)` method, it should run.
 
 ## What Works Right Now
 
 - Tutorial-round products: `EMERALDS`, `TOMATOES`
+- Round 4 products: `HYDROGEL_PACK`, `VELVETFRUIT_EXTRACT`, and the `VEV_*` vouchers
 - One-day Monte Carlo sessions: `10,000` steps per session
 - Default run: `100` sessions, `10` saved path traces
 - Heavy preset: `1000` sessions, `100` saved path traces
@@ -56,6 +58,17 @@ Run the default sweep:
 source backtester/.venv/bin/activate
 prosperity4mcbt your_trader.py --out tmp/your_run/dashboard.json
 ```
+
+Run a Round 4 sweep calibrated from the public Round 4 data:
+
+```bash
+prosperity4mcbt your_round4_trader.py \
+  --data ../../phase2/round4/algo/data \
+  --r4-stress oos \
+  --out tmp/round4_mc/dashboard.json
+```
+
+Round 4 mode is selected when `--data` points at a folder containing `prices_round_4_day_1.csv`, `prices_round_4_day_2.csv`, and `prices_round_4_day_3.csv`.
 
 Run the heavy sweep:
 
@@ -165,6 +178,29 @@ Tutorial-round Monte Carlo currently provides empty observations and does not si
 ## How It Works
 
 The Monte Carlo engine is built from the tutorial-round CSVs in `data/round0/`. The goal is not to replay the exact two observed days, but to reproduce the same visible market structure and trade distributions with a simple generative model.
+
+## Round 4 Model
+
+Round 4 mode is a synchronized block bootstrap over the actual public Round 4 books and public trades:
+
+- all products are sampled on the same timestamp blocks, preserving cross-product book states
+- source days `1`, `2`, and `3` are sampled into synthetic day `4`
+- visible book spreads can be widened with `--r4-spread-multiplier`
+- book depth can be thinned with `--r4-depth-multiplier`
+- named public trades are replayed from sampled ticks, preserving buyer/seller IDs such as the Mark profiles
+- `VELVETFRUIT_EXTRACT` and `VEV_*` products receive coherent spot/surface/tilt shocks by default under `--r4-stress oos`
+- the dashboard includes the historical R1/R2/R3 1k-vs-10k final-submission multipliers, gross terminal inventory, and late-path PnL-slope degradation
+
+Useful knobs:
+
+```bash
+prosperity4mcbt your_round4_trader.py --data ../../phase2/round4/algo/data --r4-stress none
+prosperity4mcbt your_round4_trader.py --data ../../phase2/round4/algo/data --r4-stress oos
+prosperity4mcbt your_round4_trader.py --data ../../phase2/round4/algo/data --r4-stress adverse
+prosperity4mcbt your_round4_trader.py --data ../../phase2/round4/algo/data --r4-spot-shift-std 8 --r4-surface-shift-std 6
+```
+
+Set `PROSPERITY4MCBT_R4_BLOCK_LEN` to control timestamp block length. The default keeps regimes chunky enough to preserve the Round 4 day-level structure while still creating path variation.
 
 ### 1. Fair value model
 

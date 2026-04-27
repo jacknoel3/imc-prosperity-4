@@ -193,6 +193,27 @@ make tutorial FLAT=1
 make tutorial CARRY=1
 ```
 
+Calibration presets:
+
+```bash
+rust_backtester --calibration official
+rust_backtester --calibration conservative
+rust_backtester --calibration harsh
+rust_backtester --calibration cross-only
+rust_backtester --calibration round4
+rust_backtester --calibration round4-oos
+```
+
+The default `official` preset preserves the legacy open-source assumptions:
+all eligible public trade-tape fills count, queue penetration is 100%, and no
+slippage is applied. For strategy selection, prefer `round4-oos` or
+`conservative`: they use stricter price matching, partial queue penetration,
+and small adverse slippage so a single public 1k sample is treated as a regime
+sample rather than a 10x PnL forecast. The `round4-oos` preset is deliberately
+harsher than `round4` because Round 3 showed that a strong 1k public-path
+result may fail to scale to 10k. You can still override any preset with
+`--trade-match-mode`, `--queue-penetration`, or `--price-slippage-bps`.
+
 Supported input formats:
 
 - normalized dataset JSON files

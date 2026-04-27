@@ -40,6 +40,7 @@ ROUND3_PRODUCTS = [
 ]
 ROUND3_SPOT_PRODUCTS = {"HYDROGEL_PACK", "VELVETFRUIT_EXTRACT"}
 ROUND3_OPTION_PRODUCTS = {product for product in ROUND3_PRODUCTS if product.startswith("VEV_")}
+ROUND4_SPOT_PRODUCTS = set(ROUND3_SPOT_PRODUCTS)
 GENERATED_OUTPUT_FILES = {
     "dashboard.json",
     "session_summary.csv",
@@ -310,6 +311,64 @@ def read_csv_dicts(path: Path, delimiter: str = ",") -> list[dict[str, str]]:
         return list(csv.DictReader(handle, delimiter=delimiter))
 
 
+def final_submission_json_paths() -> list[tuple[int, Path, Path]]:
+    root = project_root().parent.parent
+    return [
+        (
+            1,
+            root / "phase1" / "round1" / "algo" / "backtests" / "final_submission" / "round1_final_backtest_1k_timestamps" / "266953.json",
+            root / "phase1" / "round1" / "algo" / "backtests" / "final_submission" / "round1_live_simulation_10k_timestamps" / "273140.json",
+        ),
+        (
+            2,
+            root / "phase1" / "round2" / "algo" / "backtests" / "final_submission" / "round2_final_backtest_1k_timestamps" / "356997.json",
+            root / "phase1" / "round2" / "algo" / "backtests" / "final_submission" / "round2_live_simulation_10k_timestamps" / "361780.json",
+        ),
+        (
+            3,
+            root / "phase2" / "round3" / "algo" / "backtests" / "final_submission" / "round3_final_backtest_1k_timestamps" / "482503.json",
+            root / "phase2" / "round3" / "algo" / "backtests" / "final_submission" / "round3_live_simulation_10k_timestamps" / "485059.json",
+        ),
+    ]
+
+
+def read_json_profit(path: Path) -> Optional[float]:
+    if not path.is_file():
+        return None
+    with path.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    value = payload.get("profit")
+    return float(value) if value is not None else None
+
+
+def final_submission_calibration_summary() -> dict[str, Any]:
+    rounds = []
+    for round_num, backtest_path, live_path in final_submission_json_paths():
+        backtest_profit = read_json_profit(backtest_path)
+        live_profit = read_json_profit(live_path)
+        multiplier = live_profit / backtest_profit if backtest_profit not in (None, 0.0) and live_profit is not None else None
+        rounds.append(
+            {
+                "round": round_num,
+                "backtest1kProfit": backtest_profit,
+                "live10kProfit": live_profit,
+                "liveVsBacktestMultiplier": multiplier,
+                "expectedLinear10xProfit": backtest_profit * 10.0 if backtest_profit is not None else None,
+                "liveVsLinear10x": live_profit / (backtest_profit * 10.0)
+                if backtest_profit not in (None, 0.0) and live_profit is not None
+                else None,
+            }
+        )
+    return {
+        "source": "final_submission 1k backtest vs 10k live simulation",
+        "rounds": rounds,
+        "notes": [
+            "R1/R2 scaled close to 10x from 1k to 10k; R3 did not.",
+            "Use this as an OOS warning against strategies whose edge only appears on the first public path.",
+        ],
+    }
+
+
 def resolve_round3_actual_dir(data_root: Optional[Path]) -> Optional[Path]:
     candidates: list[Path] = []
     if data_root is not None:
@@ -332,6 +391,28 @@ def is_round3_data_root(data_root: Optional[Path]) -> bool:
     return resolve_round3_actual_dir(data_root) is not None
 
 
+def resolve_round4_actual_dir(data_root: Optional[Path]) -> Optional[Path]:
+    candidates: list[Path] = []
+    if data_root is not None:
+        candidates.extend([data_root, data_root / "round4"])
+    candidates.extend(
+        [
+            project_root() / "data" / "round4",
+            project_root().parent.parent / "phase2" / "round4" / "data",
+            project_root().parent.parent / "phase2" / "round4" / "algo" / "data",
+        ]
+    )
+
+    for candidate in candidates:
+        if (candidate / "prices_round_4_day_1.csv").is_file():
+            return candidate
+    return None
+
+
+def is_round4_data_root(data_root: Optional[Path]) -> bool:
+    return resolve_round4_actual_dir(data_root) is not None
+
+
 def read_round3_rows(actual_dir: Path, kind: str) -> list[dict[str, str]]:
     combined = actual_dir / f"{kind}_round_3_combined.csv"
     if combined.is_file():
@@ -344,6 +425,25 @@ def read_round3_rows(actual_dir: Path, kind: str) -> list[dict[str, str]]:
             rows.extend(read_csv_dicts(path, ";"))
     if not rows:
         raise FileNotFoundError(f"No Round 3 {kind} CSVs found in {actual_dir}")
+    return rows
+
+
+def read_round_rows(actual_dir: Path, round_num: int, days: list[int], kind: str) -> list[dict[str, str]]:
+    combined = actual_dir / f"{kind}_round_{round_num}_combined.csv"
+    if combined.is_file():
+        return read_csv_dicts(combined, ";")
+
+    rows: list[dict[str, str]] = []
+    for day in days:
+        path = actual_dir / f"{kind}_round_{round_num}_day_{day}.csv"
+        if path.is_file():
+            for row in read_csv_dicts(path, ";"):
+                row.setdefault("day", str(day))
+                if row.get("day", "") in ("", None):
+                    row["day"] = str(day)
+                rows.append(row)
+    if not rows:
+        raise FileNotFoundError(f"No Round {round_num} {kind} CSVs found in {actual_dir}")
     return rows
 
 
@@ -403,6 +503,15 @@ def round3_stress_profile(name: str) -> dict[str, float | str]:
             "surfaceShiftStd": 5.0,
             "surfaceTiltStd": 2.5,
         },
+        "oos": {
+            "name": "oos",
+            "spreadMultiplier": 1.25,
+            "depthMultiplier": 0.70,
+            "tradeKeepProbability": 0.70,
+            "spotShiftStd": 5.0,
+            "surfaceShiftStd": 4.0,
+            "surfaceTiltStd": 2.0,
+        },
     }
     if name not in profiles:
         valid = ", ".join(sorted(profiles))
@@ -420,6 +529,81 @@ def round3_stress_config(
     surface_tilt_std: Optional[float] = None,
 ) -> dict[str, float | str]:
     config = round3_stress_profile(profile)
+    overrides = {
+        "spreadMultiplier": spread_multiplier,
+        "depthMultiplier": depth_multiplier,
+        "tradeKeepProbability": trade_keep_probability,
+        "spotShiftStd": spot_shift_std,
+        "surfaceShiftStd": surface_shift_std,
+        "surfaceTiltStd": surface_tilt_std,
+    }
+    for key, value in overrides.items():
+        if value is not None:
+            config[key] = value
+    config["spreadMultiplier"] = max(1.0, float(config["spreadMultiplier"]))
+    config["depthMultiplier"] = clamp(float(config["depthMultiplier"]), 0.05, 2.0)
+    config["tradeKeepProbability"] = clamp(float(config["tradeKeepProbability"]), 0.0, 1.0)
+    config["spotShiftStd"] = max(0.0, float(config["spotShiftStd"]))
+    config["surfaceShiftStd"] = max(0.0, float(config["surfaceShiftStd"]))
+    config["surfaceTiltStd"] = max(0.0, float(config["surfaceTiltStd"]))
+    return config
+
+
+def round4_stress_profile(name: str) -> dict[str, float | str]:
+    profiles: dict[str, dict[str, float | str]] = {
+        "none": {
+            "name": "none",
+            "spreadMultiplier": 1.0,
+            "depthMultiplier": 1.0,
+            "tradeKeepProbability": 1.0,
+            "spotShiftStd": 0.0,
+            "surfaceShiftStd": 0.0,
+            "surfaceTiltStd": 0.0,
+        },
+        "conservative": {
+            "name": "conservative",
+            "spreadMultiplier": 1.15,
+            "depthMultiplier": 0.80,
+            "tradeKeepProbability": 0.80,
+            "spotShiftStd": 5.0,
+            "surfaceShiftStd": 4.0,
+            "surfaceTiltStd": 1.5,
+        },
+        "adverse": {
+            "name": "adverse",
+            "spreadMultiplier": 1.35,
+            "depthMultiplier": 0.60,
+            "tradeKeepProbability": 0.60,
+            "spotShiftStd": 10.0,
+            "surfaceShiftStd": 8.0,
+            "surfaceTiltStd": 3.0,
+        },
+        "oos": {
+            "name": "oos",
+            "spreadMultiplier": 1.25,
+            "depthMultiplier": 0.70,
+            "tradeKeepProbability": 0.70,
+            "spotShiftStd": 8.0,
+            "surfaceShiftStd": 6.0,
+            "surfaceTiltStd": 2.5,
+        },
+    }
+    if name not in profiles:
+        valid = ", ".join(sorted(profiles))
+        raise ValueError(f"Unknown Round 4 stress profile {name!r}; expected one of: {valid}")
+    return dict(profiles[name])
+
+
+def round4_stress_config(
+    profile: str,
+    spread_multiplier: Optional[float] = None,
+    depth_multiplier: Optional[float] = None,
+    trade_keep_probability: Optional[float] = None,
+    spot_shift_std: Optional[float] = None,
+    surface_shift_std: Optional[float] = None,
+    surface_tilt_std: Optional[float] = None,
+) -> dict[str, float | str]:
+    config = round4_stress_profile(profile)
     overrides = {
         "spreadMultiplier": spread_multiplier,
         "depthMultiplier": depth_multiplier,
@@ -492,6 +676,81 @@ def calibrate_round3_model(actual_dir: Path) -> dict[str, Any]:
         }
 
     return {
+        "products": products,
+        "pricesByDayTs": prices_by_day_ts,
+        "timestampsByDay": timestamps_by_day,
+        "tradesByDayTs": trades_by_day_ts,
+        "productStats": product_stats,
+    }
+
+
+def calibrate_round_model(
+    actual_dir: Path,
+    round_num: int,
+    days: list[int],
+    spot_products: set[str],
+) -> dict[str, Any]:
+    price_rows = read_round_rows(actual_dir, round_num, days, "prices")
+    trade_rows = read_round_rows(actual_dir, round_num, days, "trades")
+    products = sorted({row["product"] for row in price_rows})
+
+    prices_by_day_ts: dict[int, dict[int, dict[str, dict[str, str]]]] = {}
+    timestamps_by_day: dict[int, list[int]] = {}
+    mids_by_product: dict[str, list[float]] = {product: [] for product in products}
+    spreads_by_product: dict[str, list[float]] = {product: [] for product in products}
+    returns_by_product: dict[str, list[float]] = {product: [] for product in products}
+    day_means_by_product: dict[str, dict[int, list[float]]] = {product: {} for product in products}
+    previous_mid: dict[tuple[int, str], float] = {}
+
+    for row in price_rows:
+        day = row_day(row)
+        timestamp = int(row["timestamp"])
+        product = row["product"]
+        prices_by_day_ts.setdefault(day, {}).setdefault(timestamp, {})[product] = row
+        mid = product_mid(row)
+        mids_by_product[product].append(mid)
+        day_means_by_product[product].setdefault(day, []).append(mid)
+        if row.get("bid_price_1") not in ("", None) and row.get("ask_price_1") not in ("", None):
+            spreads_by_product[product].append(float(cleaned_number(row["ask_price_1"])) - float(cleaned_number(row["bid_price_1"])))
+        key = (day, product)
+        if key in previous_mid:
+            returns_by_product[product].append(mid - previous_mid[key])
+        previous_mid[key] = mid
+
+    for day, by_ts in prices_by_day_ts.items():
+        timestamps_by_day[day] = sorted(ts for ts, product_rows in by_ts.items() if all(p in product_rows for p in products))
+
+    trades_by_day_ts: dict[int, dict[int, list[dict[str, str]]]] = {}
+    trades_by_product_day: dict[str, dict[int, int]] = {product: {} for product in products}
+    qty_by_product_day: dict[str, dict[int, int]] = {product: {} for product in products}
+    for row in trade_rows:
+        day = row_day(row)
+        timestamp = int(row["timestamp"])
+        product = row["symbol"]
+        trades_by_day_ts.setdefault(day, {}).setdefault(timestamp, []).append(row)
+        trades_by_product_day.setdefault(product, {})[day] = trades_by_product_day.setdefault(product, {}).get(day, 0) + 1
+        qty_by_product_day.setdefault(product, {})[day] = qty_by_product_day.setdefault(product, {}).get(day, 0) + int(
+            float(cleaned_number(row.get("quantity", "0"), "0") or "0")
+        )
+
+    product_stats = {}
+    for product in products:
+        mids = mids_by_product[product]
+        increments = returns_by_product[product]
+        day_means = [mean(values) for _, values in sorted(day_means_by_product[product].items()) if values]
+        product_stats[product] = {
+            "meanMid": mean(mids),
+            "stdMid": sample_std(mids),
+            "stdStep": sample_std(increments),
+            "avgSpread": mean(spreads_by_product[product]),
+            "dayMeanRange": (max(day_means) - min(day_means)) if day_means else 0.0,
+            "avgTradesPerDay": mean([float(v) for v in trades_by_product_day.get(product, {}).values()]),
+            "avgQuantityPerDay": mean([float(v) for v in qty_by_product_day.get(product, {}).values()]),
+            "kind": "spot" if product in spot_products else "voucher",
+        }
+
+    return {
+        "round": round_num,
         "products": products,
         "pricesByDayTs": prices_by_day_ts,
         "timestampsByDay": timestamps_by_day,
@@ -583,6 +842,120 @@ def round3_session_shifts(
             stress_shift = 0.0
         shifts[product] = int(round(base_shift + stress_shift))
     return shifts
+
+
+def round_session_shifts(
+    products: list[str],
+    product_stats: dict[str, Any],
+    rng: random.Random,
+    shift_multiplier: float,
+    stress_config: dict[str, float | str],
+) -> dict[str, int]:
+    spot_shift = rng.gauss(0.0, float(stress_config["spotShiftStd"]))
+    surface_shift = rng.gauss(0.0, float(stress_config["surfaceShiftStd"]))
+    surface_tilt = rng.gauss(0.0, float(stress_config["surfaceTiltStd"]))
+    shifts: dict[str, int] = {}
+    for product in products:
+        base_shift = rng.gauss(0.0, max(0.5, product_stats[product]["stdStep"]) * shift_multiplier)
+        if product == "VELVETFRUIT_EXTRACT":
+            stress_shift = spot_shift
+        elif product == "HYDROGEL_PACK":
+            stress_shift = rng.gauss(0.0, float(stress_config["spotShiftStd"]) * 0.5)
+        elif product.startswith("VEV_"):
+            strike = vev_strike(product) or 5250
+            moneyness = clamp((5250 - strike) / 1250.0, -1.0, 1.0)
+            delta_like = clamp(0.55 + moneyness * 0.35, 0.05, 0.95)
+            stress_shift = surface_shift + delta_like * spot_shift + moneyness * surface_tilt
+        else:
+            stress_shift = 0.0
+        shifts[product] = int(round(base_shift + stress_shift))
+    return shifts
+
+
+def synthetic_round_session(
+    model: dict[str, Any],
+    session_dir: Path,
+    rng: random.Random,
+    round_num: int,
+    ticks_per_day: int,
+    output_days: list[int],
+    shift_multiplier: float,
+    stress_config: dict[str, float | str],
+    block_len_env: str,
+) -> None:
+    round_dir = session_dir / f"round{round_num}"
+    round_dir.mkdir(parents=True, exist_ok=True)
+    products = model["products"]
+    day_values = sorted(model["timestampsByDay"])
+    configured_block_len = int(os.environ.get(block_len_env, "0"))
+
+    price_fields = [
+        "day",
+        "timestamp",
+        "product",
+        "bid_price_1",
+        "bid_volume_1",
+        "bid_price_2",
+        "bid_volume_2",
+        "bid_price_3",
+        "bid_volume_3",
+        "ask_price_1",
+        "ask_volume_1",
+        "ask_price_2",
+        "ask_volume_2",
+        "ask_price_3",
+        "ask_volume_3",
+        "mid_price",
+        "profit_and_loss",
+    ]
+    trade_fields = ["timestamp", "buyer", "seller", "symbol", "currency", "price", "quantity"]
+    product_shifts = round_session_shifts(products, model["productStats"], rng, shift_multiplier, stress_config)
+    trade_keep_probability = float(stress_config["tradeKeepProbability"])
+
+    for output_day in output_days:
+        source_day = rng.choice(day_values)
+        source_timestamps = model["timestampsByDay"][source_day]
+        target_len = min(ticks_per_day, len(source_timestamps))
+        block_len = configured_block_len if configured_block_len > 0 else max(100, min(1000, target_len))
+        block_len = max(1, min(block_len, len(source_timestamps)))
+        sampled_ts: list[int] = []
+        while len(sampled_ts) < target_len:
+            max_start = max(0, len(source_timestamps) - block_len)
+            start = rng.randint(0, max_start) if max_start > 0 else 0
+            sampled_ts.extend(source_timestamps[start : start + block_len])
+        sampled_ts = sampled_ts[:target_len]
+
+        with (round_dir / f"prices_round_{round_num}_day_{output_day}.csv").open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=price_fields, delimiter=";")
+            writer.writeheader()
+            for index, source_ts in enumerate(sampled_ts):
+                timestamp = index * 100
+                source_rows = model["pricesByDayTs"][source_day][source_ts]
+                for product in products:
+                    writer.writerow(
+                        shifted_price_row(
+                            source_rows[product],
+                            output_day,
+                            timestamp,
+                            product_shifts[product],
+                            stress_config,
+                        )
+                    )
+
+        with (round_dir / f"trades_round_{round_num}_day_{output_day}.csv").open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=trade_fields, delimiter=";")
+            writer.writeheader()
+            for index, source_ts in enumerate(sampled_ts):
+                timestamp = index * 100
+                for trade in model["tradesByDayTs"].get(source_day, {}).get(source_ts, []):
+                    if rng.random() > trade_keep_probability:
+                        continue
+                    row = {field: trade.get(field, "") for field in trade_fields}
+                    row["timestamp"] = str(timestamp)
+                    row["price"] = numeric_price(row["price"], product_shifts.get(row["symbol"], 0))
+                    row["quantity"] = cleaned_number(row["quantity"], "0")
+                    row["currency"] = row["currency"] or "XIRECS"
+                    writer.writerow(row)
 
 
 def synthetic_round3_session(
@@ -724,6 +1097,23 @@ def fitted_path_stats(values: list[float]) -> tuple[float, float]:
     x_values = [float(index) for index in range(len(values))]
     fit = linear_regression(x_values, values)
     return float(fit["slope"]), float(fit["r2"])
+
+
+def tail_degradation(values: list[float]) -> dict[str, float]:
+    if len(values) < 4:
+        return {"firstQuarterSlope": 0.0, "lastQuarterSlope": 0.0, "lastVsFirstSlope": 0.0}
+    quarter = max(2, len(values) // 4)
+    first_slope, _ = fitted_path_stats(values[:quarter])
+    last_slope, _ = fitted_path_stats(values[-quarter:])
+    return {
+        "firstQuarterSlope": first_slope,
+        "lastQuarterSlope": last_slope,
+        "lastVsFirstSlope": last_slope - first_slope,
+    }
+
+
+def gross_position(position: dict[str, int | float]) -> float:
+    return float(sum(abs(value) for product, value in position.items() if product != "XIRECS"))
 
 
 def downsample_indices(length: int, max_points: int) -> list[int]:
@@ -1335,10 +1725,13 @@ def build_round3_dashboard(
     product_stats: dict[str, Any],
     config: dict[str, Any],
 ) -> dict[str, Any]:
+    round_num = int(config.get("round", 3))
     total = [row["totalPnl"] for row in session_rows]
     product_pnls = {product: [row["productPnl"].get(product, 0.0) for row in session_rows] for product in products}
     product_positions = {product: [row["productPosition"].get(product, 0.0) for row in session_rows] for product in products}
     product_cash = {product: [row["productCash"].get(product, 0.0) for row in session_rows] for product in products}
+    gross_terminal_inventory = [row.get("grossTerminalInventory", 0.0) for row in session_rows]
+    tail_slope_degradation = [row.get("tailDegradation", {}).get("lastVsFirstSlope", 0.0) for row in session_rows]
     total_profitability = [row["totalSlopePerStep"] for row in run_rows]
     total_stability = [row["totalR2"] for row in run_rows]
 
@@ -1378,6 +1771,8 @@ def build_round3_dashboard(
             "pepperPnl": summarize_distribution(product_pnls[second_product]),
             "ashPepperCorrelation": correlation(product_pnls[first_product], product_pnls[second_product]),
             "productPnl": {product: summarize_distribution(values) for product, values in product_pnls.items()},
+            "grossTerminalInventory": summarize_distribution(gross_terminal_inventory),
+            "tailSlopeDegradation": summarize_distribution(tail_slope_degradation),
         },
         "trendFits": {
             "TOTAL": {
@@ -1401,11 +1796,16 @@ def build_round3_dashboard(
         "scatterFit": linear_regression(product_pnls[first_product], product_pnls[second_product]),
         "generatorModel": {
             product: {
-                "name": "Round 3 Block Bootstrap",
-                "formula": "Synchronized timestamp blocks sampled from real Round 3 order books; trade arrivals replayed from sampled source ticks",
+                "name": f"Round {round_num} Block Bootstrap",
+                "formula": f"Synchronized timestamp blocks sampled from real Round {round_num} order books; trade arrivals replayed from sampled source ticks",
                 "notes": [
-                    f"{product_stats[product]['kind']} product; mean mid {product_stats[product]['meanMid']:.2f}, step std {product_stats[product]['stdStep']:.3f}",
+                    (
+                        f"{product_stats[product]['kind']} product; mean mid {product_stats[product]['meanMid']:.2f}, "
+                        f"step std {product_stats[product]['stdStep']:.3f}, "
+                        f"avg spread {product_stats[product].get('avgSpread', 0.0):.2f}"
+                    ),
                     "All products are sampled on the same timestamp blocks to preserve cross-product book state dependence.",
+                    "Public trades preserve historical counterparty names and trade clustering from the sampled source ticks.",
                 ],
             }
             for product in products
@@ -1427,6 +1827,8 @@ def build_round3_dashboard(
             "productPnl": {product: histogram(values) for product, values in product_pnls.items()},
             "productProfitability": {product: histogram(values) for product, values in product_profitability.items()},
             "productStability": {product: histogram(values) for product, values in product_stability.items()},
+            "grossTerminalInventory": histogram(gross_terminal_inventory),
+            "tailSlopeDegradation": histogram(tail_slope_degradation),
         },
         "sessions": session_rows,
         "runs": run_rows,
@@ -1612,19 +2014,22 @@ def run_round3_python_monte_carlo(
 
         total_pnl = sum(session_product_pnl.values())
         total_slope, total_r2 = fitted_path_stats(session_total_path["mtmPnl"])
+        terminal_position = getattr(result, "final_position", {})
         session_rows.append(
             {
                 "sessionId": session_id,
                 "totalPnl": total_pnl,
                 "productPnl": dict(session_product_pnl),
-                "productPosition": {product: 0 for product in products},
+                "productPosition": {product: terminal_position.get(product, 0) for product in products},
                 "productCash": {product: 0.0 for product in products},
+                "grossTerminalInventory": gross_position(terminal_position),
+                "tailDegradation": tail_degradation(session_total_path["mtmPnl"]),
                 "totalSlopePerStep": total_slope,
                 "totalR2": total_r2,
                 "ashPnl": session_product_pnl.get(products[0], 0.0),
                 "pepperPnl": session_product_pnl.get(products[1], 0.0) if len(products) > 1 else 0.0,
-                "ashPosition": 0,
-                "pepperPosition": 0,
+                "ashPosition": terminal_position.get(products[0], 0),
+                "pepperPosition": terminal_position.get(products[1], 0) if len(products) > 1 else 0,
                 "ashCash": 0.0,
                 "pepperCash": 0.0,
             }
@@ -1651,6 +2056,195 @@ def run_round3_python_monte_carlo(
             "outputDays": output_days,
             "shiftMultiplier": shift_multiplier,
             "round3Stress": stress_config,
+            "historicalOosCalibration": final_submission_calibration_summary(),
+        },
+    )
+    with dashboard_path.open("w", encoding="utf-8") as handle:
+        json.dump(dashboard, handle, indent=2)
+    return dashboard
+
+
+def run_round4_python_monte_carlo(
+    algorithm: Path,
+    dashboard_path: Path,
+    data_root: Optional[Path],
+    sessions: int,
+    seed: int,
+    sample_sessions: int,
+    ticks_per_day: int,
+    fv_mode: str,
+    trade_mode: str,
+    tomato_support: str,
+    r4_stress: str = "oos",
+    r4_spread_multiplier: Optional[float] = None,
+    r4_depth_multiplier: Optional[float] = None,
+    r4_trade_keep_probability: Optional[float] = None,
+    r4_spot_shift_std: Optional[float] = None,
+    r4_surface_shift_std: Optional[float] = None,
+    r4_surface_tilt_std: Optional[float] = None,
+) -> dict[str, Any]:
+    actual_dir = resolve_round4_actual_dir(data_root)
+    if actual_dir is None:
+        raise RuntimeError("Round 4 data directory was not found")
+
+    output_dir = dashboard_path.parent
+    model = calibrate_round_model(actual_dir, 4, [1, 2, 3], ROUND4_SPOT_PRODUCTS)
+    products = model["products"]
+    output_days = [4]
+    shift_multiplier = float(os.environ.get("PROSPERITY4MCBT_R4_SHIFT_MULTIPLIER", "0.30"))
+    stress_config = round4_stress_config(
+        r4_stress,
+        spread_multiplier=r4_spread_multiplier,
+        depth_multiplier=r4_depth_multiplier,
+        trade_keep_probability=r4_trade_keep_probability,
+        spot_shift_std=r4_spot_shift_std,
+        surface_shift_std=r4_surface_shift_std,
+        surface_tilt_std=r4_surface_tilt_std,
+    )
+    rng = random.Random(seed)
+    trader_module = parse_algorithm_module(algorithm)
+    session_rows: list[dict[str, Any]] = []
+    run_rows: list[dict[str, Any]] = []
+    sample_paths: list[dict[str, Any]] = []
+
+    sessions_dir = output_dir / "sessions"
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+
+    for session_id in range(sessions):
+        session_dir = sessions_dir / f"session_{session_id}"
+        synthetic_round_session(
+            model,
+            session_dir,
+            rng,
+            4,
+            ticks_per_day,
+            output_days=output_days,
+            shift_multiplier=shift_multiplier,
+            stress_config=stress_config,
+            block_len_env="PROSPERITY4MCBT_R4_BLOCK_LEN",
+        )
+        reader = FileSystemReader(session_dir)
+        session_product_pnl = {product: 0.0 for product in products}
+        session_product_paths = {
+            product: {"timestamps": [], "fair": [], "mid": [], "bid1": [], "ask1": [], "position": [], "cash": [], "mtmPnl": []}
+            for product in products
+        }
+        session_total_path = {"timestamps": [], "mtmPnl": []}
+
+        for day in output_days:
+            trader = trader_module.Trader()
+            result = run_backtest(
+                trader,
+                reader,
+                4,
+                day,
+                False,
+                TradeMatchingMode.all,
+                False,
+                False,
+            )
+            product_pnl = final_product_pnl(result)
+            day_total = sum(product_pnl.values())
+            product_paths = activity_path(result, day * 1_000_000)
+            total_series_by_timestamp: dict[float, float] = {}
+            for product in products:
+                session_product_pnl[product] += product_pnl.get(product, 0.0)
+                node = session_product_paths[product]
+                path_node = product_paths.get(product)
+                if path_node is None:
+                    continue
+                for key in node:
+                    node[key].extend(path_node[key])
+                for timestamp, pnl in zip(path_node["timestamps"], path_node["mtmPnl"]):
+                    total_series_by_timestamp[timestamp] = total_series_by_timestamp.get(timestamp, 0.0) + pnl
+
+            total_values = [value for _, value in sorted(total_series_by_timestamp.items())]
+            total_slope, total_r2 = fitted_path_stats(total_values)
+            product_slopes = {
+                product: fitted_path_stats(session_product_paths[product]["mtmPnl"])[0] for product in products
+            }
+            product_r2 = {product: fitted_path_stats(session_product_paths[product]["mtmPnl"])[1] for product in products}
+            run_rows.append(
+                {
+                    "sessionId": session_id,
+                    "day": day,
+                    "totalPnl": day_total,
+                    "productPnl": product_pnl,
+                    "totalSlopePerStep": total_slope,
+                    "totalR2": total_r2,
+                    "productSlopePerStep": product_slopes,
+                    "productR2": product_r2,
+                    "ashPnl": product_pnl.get(products[0], 0.0),
+                    "pepperPnl": product_pnl.get(products[1], 0.0) if len(products) > 1 else 0.0,
+                }
+            )
+
+        timestamps = session_product_paths[products[0]]["timestamps"]
+        for index, timestamp in enumerate(timestamps):
+            session_total_path["timestamps"].append(timestamp)
+            session_total_path["mtmPnl"].append(
+                sum(session_product_paths[product]["mtmPnl"][index] for product in products)
+            )
+
+        total_pnl = sum(session_product_pnl.values())
+        total_slope, total_r2 = fitted_path_stats(session_total_path["mtmPnl"])
+        terminal_position = getattr(result, "final_position", {})
+        session_rows.append(
+            {
+                "sessionId": session_id,
+                "totalPnl": total_pnl,
+                "productPnl": dict(session_product_pnl),
+                "productPosition": {product: terminal_position.get(product, 0) for product in products},
+                "productCash": {product: 0.0 for product in products},
+                "grossTerminalInventory": gross_position(terminal_position),
+                "tailDegradation": tail_degradation(session_total_path["mtmPnl"]),
+                "totalSlopePerStep": total_slope,
+                "totalR2": total_r2,
+                "ashPnl": session_product_pnl.get(products[0], 0.0),
+                "pepperPnl": session_product_pnl.get(products[1], 0.0) if len(products) > 1 else 0.0,
+                "ashPosition": terminal_position.get(products[0], 0),
+                "pepperPosition": terminal_position.get(products[1], 0) if len(products) > 1 else 0,
+                "ashCash": 0.0,
+                "pepperCash": 0.0,
+            }
+        )
+        if session_id < sample_sessions:
+            sample_paths.append({"sessionId": session_id, "products": session_product_paths, "total": session_total_path})
+
+    dashboard = build_round3_dashboard(
+        output_dir=output_dir,
+        algorithm=algorithm,
+        sessions=sessions,
+        products=products,
+        session_rows=session_rows,
+        run_rows=run_rows,
+        sample_paths=sample_paths,
+        product_stats=model["productStats"],
+        config={
+            "round": 4,
+            "model": "round4_block_bootstrap_named_flow",
+            "fvMode": fv_mode,
+            "tradeMode": trade_mode,
+            "tomatoSupport": tomato_support,
+            "seed": seed,
+            "sampleSessions": sample_sessions,
+            "ticksPerDay": ticks_per_day,
+            "outputDays": output_days,
+            "shiftMultiplier": shift_multiplier,
+            "sourceDays": [1, 2, 3],
+            "round4Stress": stress_config,
+            "historicalOosCalibration": final_submission_calibration_summary(),
+            "round4Calibration": {
+                product: {
+                    "meanMid": model["productStats"][product]["meanMid"],
+                    "stdStep": model["productStats"][product]["stdStep"],
+                    "avgSpread": model["productStats"][product]["avgSpread"],
+                    "dayMeanRange": model["productStats"][product]["dayMeanRange"],
+                    "avgTradesPerDay": model["productStats"][product]["avgTradesPerDay"],
+                    "avgQuantityPerDay": model["productStats"][product]["avgQuantityPerDay"],
+                }
+                for product in products
+            },
         },
     )
     with dashboard_path.open("w", encoding="utf-8") as handle:
@@ -1736,6 +2330,13 @@ def run_monte_carlo_mode(
     r3_spot_shift_std: Optional[float] = None,
     r3_surface_shift_std: Optional[float] = None,
     r3_surface_tilt_std: Optional[float] = None,
+    r4_stress: str = "oos",
+    r4_spread_multiplier: Optional[float] = None,
+    r4_depth_multiplier: Optional[float] = None,
+    r4_trade_keep_probability: Optional[float] = None,
+    r4_spot_shift_std: Optional[float] = None,
+    r4_surface_shift_std: Optional[float] = None,
+    r4_surface_tilt_std: Optional[float] = None,
 ) -> dict[str, Any]:
     output_dir = dashboard_path.parent
     if output_dir.exists():
@@ -1748,6 +2349,27 @@ def run_monte_carlo_mode(
             if path.is_dir():
                 shutil.rmtree(path)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    if data_root is not None and is_round4_data_root(data_root):
+        return run_round4_python_monte_carlo(
+            algorithm=algorithm,
+            dashboard_path=dashboard_path,
+            data_root=data_root,
+            sessions=sessions,
+            seed=seed,
+            sample_sessions=sample_sessions,
+            ticks_per_day=ticks_per_day,
+            fv_mode=fv_mode,
+            trade_mode=trade_mode,
+            tomato_support=tomato_support,
+            r4_stress=r4_stress,
+            r4_spread_multiplier=r4_spread_multiplier,
+            r4_depth_multiplier=r4_depth_multiplier,
+            r4_trade_keep_probability=r4_trade_keep_probability,
+            r4_spot_shift_std=r4_spot_shift_std,
+            r4_surface_shift_std=r4_surface_shift_std,
+            r4_surface_tilt_std=r4_surface_tilt_std,
+        )
 
     if is_round3_data_root(data_root):
         return run_round3_python_monte_carlo(
