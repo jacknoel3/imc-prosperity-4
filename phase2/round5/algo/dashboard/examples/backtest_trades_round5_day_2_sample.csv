@@ -1,0 +1,3 @@
+timestamp,product,price,quantity,side,pnl,position,fill_type
+0,PEBBLES_L,10000,2,buy,0,2,sample_fill
+100,PEBBLES_L,10002,1,sell,2,1,sample_fill
