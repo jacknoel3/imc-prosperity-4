@@ -1,6 +1,11 @@
+import csv
+import hashlib
+import math
 import os
 from contextlib import closing, redirect_stdout
+from functools import lru_cache
 from io import StringIO
+from pathlib import Path
 
 from IPython.utils.io import Tee
 from tqdm import tqdm
@@ -25,6 +30,124 @@ from prosperity3bt.models import (
     TradeMatchingMode,
     TradeRow,
 )
+
+
+PROFILE_FALLBACK_MULTIPLIER = 0.35
+
+
+def clamp(value: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, value))
+
+
+def stable_unit_interval(*parts: object) -> float:
+    raw = "|".join(map(str, parts)).encode("utf-8")
+    digest = hashlib.blake2b(raw, digest_size=8).digest()
+    return int.from_bytes(digest, "big") / float(1 << 64)
+
+
+def find_round4_profile_dir() -> Path | None:
+    configured = os.environ.get("PROSPERITY4MCBT_R4_PROFILE_DIR")
+    if configured:
+        path = Path(configured)
+        return path if path.is_dir() else None
+
+    relative = Path("phase2/round4/algo/backtests/player_profile_current")
+    for base in [Path.cwd(), *Path.cwd().parents]:
+        candidate = base / relative
+        if candidate.is_dir():
+            return candidate
+
+    return None
+
+
+@lru_cache(maxsize=1)
+def round4_fill_profile() -> dict[str, dict[tuple[str, ...], float]]:
+    profile_dir = find_round4_profile_dir()
+    counterparty: dict[tuple[str, str], float] = {}
+    product: dict[tuple[str, str], float] = {}
+    if profile_dir is None:
+        return {"counterparty": counterparty, "product": product}
+
+    counterparty_path = profile_dir / "bot_counterparty_exposure.csv"
+    if counterparty_path.is_file():
+        with counterparty_path.open("r", encoding="utf-8", newline="") as handle:
+            for row in csv.DictReader(handle):
+                name = row.get("counterparty", "")
+                side = row.get("submission_side", "")
+                if not name or side not in {"BUY", "SELL"}:
+                    continue
+                qty = float(row.get("qty") or 0.0)
+                fills = float(row.get("fills") or 0.0)
+                # Quantity and fill count are realized probe exposure, not a true
+                # opportunity denominator. Treat them as confidence/liquidity caps.
+                counterparty[(name, side)] = max(
+                    counterparty.get((name, side), 0.0),
+                    clamp(0.20 + qty / 90.0 + fills / 180.0, 0.20, 1.0),
+                )
+
+    product_path = profile_dir / "bot_product_own_fills.csv"
+    if product_path.is_file():
+        with product_path.open("r", encoding="utf-8", newline="") as handle:
+            for row in csv.DictReader(handle):
+                symbol = row.get("product", "")
+                side = row.get("submission_side", "")
+                if not symbol or side not in {"BUY", "SELL"}:
+                    continue
+                qty = float(row.get("qty") or 0.0)
+                fills = float(row.get("fills") or 0.0)
+                product[(symbol, side)] = max(
+                    product.get((symbol, side), 0.0),
+                    clamp(0.20 + qty / 160.0 + fills / 260.0, 0.20, 1.0),
+                )
+
+    return {"counterparty": counterparty, "product": product}
+
+
+def profiled_multiplier(symbol: str, counterparty: str, submission_side: str) -> float:
+    profile = round4_fill_profile()
+    counterparty_score = profile["counterparty"].get(
+        (counterparty, submission_side),
+        PROFILE_FALLBACK_MULTIPLIER,
+    )
+    product_score = profile["product"].get(
+        (symbol, submission_side),
+        PROFILE_FALLBACK_MULTIPLIER,
+    )
+    return clamp(math.sqrt(counterparty_score * product_score), 0.05, 1.0)
+
+
+def profiled_volume_cap(
+    symbol: str,
+    counterparty: str,
+    submission_side: str,
+    eligible_volume: int,
+    timestamp: int,
+    price: int,
+) -> int:
+    if eligible_volume <= 0:
+        return 0
+    multiplier = profiled_multiplier(symbol, counterparty, submission_side)
+    target = eligible_volume * multiplier
+    base = int(math.floor(target))
+    if stable_unit_interval(symbol, counterparty, submission_side, timestamp, price, eligible_volume) < target - base:
+        base += 1
+    return min(eligible_volume, base)
+
+
+def buy_queue_ahead(state: TradingState, order: Order) -> int:
+    return sum(
+        volume
+        for price, volume in state.order_depths[order.symbol].buy_orders.items()
+        if price >= order.price
+    )
+
+
+def sell_queue_ahead(state: TradingState, order: Order) -> int:
+    return sum(
+        abs(volume)
+        for price, volume in state.order_depths[order.symbol].sell_orders.items()
+        if price <= order.price
+    )
 
 
 def prepare_state(state: TradingState, data: BacktestData) -> None:
@@ -181,7 +304,21 @@ def match_buy_order(
         ):
             continue
 
-        volume = min(order.quantity, market_trade.sell_quantity)
+        available_sell_quantity = market_trade.sell_quantity
+        if trade_matching_mode == TradeMatchingMode.profiled:
+            available_sell_quantity = max(0, available_sell_quantity - buy_queue_ahead(state, order))
+            available_sell_quantity = profiled_volume_cap(
+                order.symbol,
+                market_trade.trade.seller,
+                "BUY",
+                available_sell_quantity,
+                state.timestamp,
+                order.price,
+            )
+
+        volume = min(order.quantity, available_sell_quantity)
+        if volume <= 0:
+            continue
 
         trades.append(
             Trade(order.symbol, order.price, volume, "SUBMISSION", market_trade.trade.seller, state.timestamp)
@@ -237,7 +374,21 @@ def match_sell_order(
         ):
             continue
 
-        volume = min(abs(order.quantity), market_trade.buy_quantity)
+        available_buy_quantity = market_trade.buy_quantity
+        if trade_matching_mode == TradeMatchingMode.profiled:
+            available_buy_quantity = max(0, available_buy_quantity - sell_queue_ahead(state, order))
+            available_buy_quantity = profiled_volume_cap(
+                order.symbol,
+                market_trade.trade.buyer,
+                "SELL",
+                available_buy_quantity,
+                state.timestamp,
+                order.price,
+            )
+
+        volume = min(abs(order.quantity), available_buy_quantity)
+        if volume <= 0:
+            continue
 
         trades.append(Trade(order.symbol, order.price, volume, market_trade.trade.buyer, "SUBMISSION", state.timestamp))
 

@@ -2139,7 +2139,7 @@ def run_round4_python_monte_carlo(
                 4,
                 day,
                 False,
-                TradeMatchingMode.all,
+                TradeMatchingMode.profiled,
                 False,
                 False,
             )
