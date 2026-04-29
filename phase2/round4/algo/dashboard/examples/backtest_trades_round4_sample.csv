@@ -1,0 +1,5 @@
+timestamp,product,price,quantity,side,pnl,position
+4500,VEV_5400,18,2,buy,0,2
+7200,VELVETFRUIT_EXTRACT,5248,4,sell,12,-2
+9100,HYDROGEL_PACK,9958,3,buy,18,1
+12600,VEV_6000,3,5,sell,25,-4

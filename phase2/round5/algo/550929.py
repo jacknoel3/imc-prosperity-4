@@ -42,9 +42,6 @@ class Trader:
     ]
 
     EXIT_Z = 0.0
-    DOMINANT_TREND_LOOKBACK = 100
-    DOMINANT_TREND_TICKS = 250.0
-    DOMINANT_TREND_SHARE = 0.55
     DEBUG = False
 
     def bid(self) -> int:
@@ -66,12 +63,12 @@ class Trader:
 
             residual = mid_a + mid_b if residual_type == "sum" else mid_a - mid_b
             store = pair_data.setdefault(name, self._new_pair_store())
-            z = self._update_rolling(store, residual, mid_a, mid_b, int(window))
+            z = self._update_rolling(store, residual, int(window))
             if z is None:
                 continue
 
             old_signal = int(store.get("signal", 0) or 0)
-            new_signal = self._next_signal(old_signal, z, float(entry_z), store)
+            new_signal = self._next_signal(old_signal, z, float(entry_z))
             store["signal"] = new_signal
             store["last_z"] = z
 
@@ -100,7 +97,7 @@ class Trader:
         return result, 0, self._encode_state(data)
 
     def _new_pair_store(self) -> Dict:
-        return {"hist": [], "mid_a_hist": [], "mid_b_hist": [], "sum": 0.0, "sumsq": 0.0, "signal": 0}
+        return {"hist": [], "sum": 0.0, "sumsq": 0.0, "signal": 0}
 
     def _decode_state(self, trader_data: str) -> Dict:
         if not trader_data:
@@ -131,23 +128,12 @@ class Trader:
             return None
         return (best_bid + best_ask) / 2.0
 
-    def _update_rolling(
-        self,
-        store: Dict,
-        value: float,
-        mid_a: float,
-        mid_b: float,
-        window: int,
-    ) -> Optional[float]:
+    def _update_rolling(self, store: Dict, value: float, window: int) -> Optional[float]:
         hist = store.setdefault("hist", [])
-        mid_a_hist = store.setdefault("mid_a_hist", [])
-        mid_b_hist = store.setdefault("mid_b_hist", [])
         total = float(store.get("sum", 0.0))
         total_sq = float(store.get("sumsq", 0.0))
 
         hist.append(value)
-        mid_a_hist.append(mid_a)
-        mid_b_hist.append(mid_b)
         total += value
         total_sq += value * value
 
@@ -155,11 +141,6 @@ class Trader:
             old = float(hist.pop(0))
             total -= old
             total_sq -= old * old
-        max_mid_history = self.DOMINANT_TREND_LOOKBACK + 1
-        if len(mid_a_hist) > max_mid_history:
-            mid_a_hist.pop(0)
-        if len(mid_b_hist) > max_mid_history:
-            mid_b_hist.pop(0)
 
         store["sum"] = total
         store["sumsq"] = total_sq
@@ -176,11 +157,11 @@ class Trader:
 
         return (value - mean) / std
 
-    def _next_signal(self, signal: int, z: float, entry_z: float, store: Dict) -> int:
+    def _next_signal(self, signal: int, z: float, entry_z: float) -> int:
         if signal == 0:
-            if z > entry_z and not self._dominant_trend_against_entry(store, signal=-1):
+            if z > entry_z:
                 return -1
-            if z < -entry_z and not self._dominant_trend_against_entry(store, signal=1):
+            if z < -entry_z:
                 return 1
             return 0
 
@@ -189,34 +170,6 @@ class Trader:
         if signal == -1 and z <= -self.EXIT_Z:
             return 0
         return signal
-
-    def _dominant_trend_against_entry(self, store: Dict, signal: int) -> bool:
-        mid_a_hist = store.get("mid_a_hist", [])
-        mid_b_hist = store.get("mid_b_hist", [])
-        lookback = self.DOMINANT_TREND_LOOKBACK
-        if len(mid_a_hist) <= lookback or len(mid_b_hist) <= lookback:
-            return False
-
-        move_a = float(mid_a_hist[-1]) - float(mid_a_hist[-1 - lookback])
-        move_b = float(mid_b_hist[-1]) - float(mid_b_hist[-1 - lookback])
-        total_abs_move = abs(move_a) + abs(move_b)
-        if total_abs_move <= 1e-9:
-            return False
-
-        if signal < 0:
-            dominant_up_move = max(move_a, move_b)
-            return (
-                move_a + move_b > self.DOMINANT_TREND_TICKS
-                and dominant_up_move > self.DOMINANT_TREND_TICKS
-                and dominant_up_move / total_abs_move >= self.DOMINANT_TREND_SHARE
-            )
-
-        dominant_down_move = max(-move_a, -move_b)
-        return (
-            move_a + move_b < -self.DOMINANT_TREND_TICKS
-            and dominant_down_move > self.DOMINANT_TREND_TICKS
-            and dominant_down_move / total_abs_move >= self.DOMINANT_TREND_SHARE
-        )
 
     def _pair_targets(
         self,
