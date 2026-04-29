@@ -1,0 +1,10 @@
+Round 5 Pebbles/Robots EDA Summary
+========================================
+Best Pebbles lead-lag: PEBBLES_XL -> PEBBLES_M at h=1, mean_corr=-0.0103, min_abs_corr=0.0088, inverse/fade
+Best Robot lead-lag: ROBOT_MOPPING -> ROBOT_IRONING at h=10, mean_corr=0.0225, min_abs_corr=0.0200, positive/follow
+Best Pebbles residual: XL_vs_avg_XS_S_M_L inverse; h=20, ok_rate=1.00, high_mean=-15.111, low_mean=17.784, high_std=-5.402, low_std=6.356, corr=-0.6982
+Pebbles recommendation from evidence: residual_mean_reversion on XL_vs_avg_XS_S_M_L (inverse). Trade mode: passive entry near z extremes; active only after reversal confirmation.
+Robots recommendation from evidence: independent_market_making on ROBOT_VACUUMING. Trade mode: passive.
+Recommended next strategy to code: residual_mean_reversion (pebbles) using XL_vs_avg_XS_S_M_L (inverse); signal: high residual z should predict negative future residual change; low z positive change; risk: common Pebbles trend or changing beta can dominate residual mean reversion.
+
+Important: these are research rankings, not optimized trading rules.

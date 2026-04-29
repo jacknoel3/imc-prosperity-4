@@ -1,0 +1,7 @@
+day,timestamp,product,price,quantity,side,pnl,position,fill_type
+3,318800,PEBBLES_XL,12517,5,buy,-40.0,5,active
+3,366100,PEBBLES_XL,12979,5,sell,2310.0,0,active
+3,413100,PEBBLES_XL,12974,5,buy,2267.5,5,active
+3,458600,PEBBLES_XL,14051,5,sell,7695.0,0,active
+3,907800,PEBBLES_XL,13087,5,sell,7652.5,-5,active
+3,930000,PEBBLES_XL,12458,5,buy,10840.0,0,active

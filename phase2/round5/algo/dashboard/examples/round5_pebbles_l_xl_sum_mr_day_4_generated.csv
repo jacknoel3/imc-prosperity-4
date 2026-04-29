@@ -1,0 +1,14 @@
+day,timestamp,product,price,quantity,side,pnl,position,fill_type
+4,456900,PEBBLES_L,11011,3,sell,-10.5,-3,active
+4,456900,PEBBLES_L,11011,3,sell,-21.0,-6,active
+4,456900,PEBBLES_L,11004,4,sell,-63.0,-10,active
+4,456900,PEBBLES_XL,14786,3,sell,-15.0,-3,active
+4,456900,PEBBLES_XL,14786,2,sell,-25.0,-5,active
+4,475900,PEBBLES_L,11083,10,buy,-748.0,0,active
+4,475900,PEBBLES_XL,14061,5,buy,3625.0,0,active
+4,774700,PEBBLES_XL,16842,5,buy,3572.5,5,active
+4,820000,PEBBLES_XL,16388,3,sell,1376.0,2,active
+4,820200,PEBBLES_XL,16327,2,sell,1233.0,0,active
+4,826200,PEBBLES_L,9500,10,buy,-808.0,10,active
+4,900100,PEBBLES_L,9394,5,sell,-1778.0,5,active
+4,900400,PEBBLES_L,9395,5,sell,-1803.0,0,active

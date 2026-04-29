@@ -1,0 +1,9 @@
+timestamp,product,price,quantity,side,pnl,position,fill_type
+29000,PEBBLES_S,8643,10,sell,-60.0,-10,active
+29000,PEBBLES_XS,7004,10,sell,-45.0,-10,active
+48100,PEBBLES_S,8683,10,buy,-400.0,0,active
+48100,PEBBLES_XS,7081,10,buy,-770.0,0,active
+67700,PEBBLES_S,8555,10,buy,-460.0,10,active
+67700,PEBBLES_XS,7028,10,buy,-820.0,10,active
+73800,PEBBLES_S,8704,10,sell,1090.0,0,active
+73800,PEBBLES_XS,7037,10,sell,-680.0,0,active

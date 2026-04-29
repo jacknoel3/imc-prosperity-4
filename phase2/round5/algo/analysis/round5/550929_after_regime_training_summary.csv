@@ -1,0 +1,5 @@
+sample,rows,first_ts,last_ts,total_pnl_proxy,positions
+training_day_2,164,31100,998200,29810.0,"{'PEBBLES_S': 0, 'PEBBLES_XS': 0, 'PEBBLES_XL': 0, 'PEBBLES_L': 0}"
+training_day_3,148,45700,985900,31056.0,"{'PEBBLES_S': 0, 'PEBBLES_XS': 0, 'PEBBLES_XL': 0, 'PEBBLES_L': 0}"
+training_day_4,182,29000,967800,16960.0,"{'PEBBLES_S': 0, 'PEBBLES_XS': 0, 'PEBBLES_XL': 0, 'PEBBLES_L': 0}"
+uploaded_550929_replay_after_regime,12,29000,73800,3530.0,"{'PEBBLES_L': 0, 'PEBBLES_XL': 0, 'PEBBLES_S': 0, 'PEBBLES_XS': 0}"
