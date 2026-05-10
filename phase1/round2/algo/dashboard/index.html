@@ -105,6 +105,24 @@
               <span>Trade Qty Max</span>
               <input id="trade-max-input" type="number" min="0" step="1" value="9999" />
             </label>
+
+            <label class="field">
+              <span>Trader IDs</span>
+              <input id="trade-trader-filter-input" type="text" placeholder="Buyer/seller IDs" />
+            </label>
+
+            <label class="field">
+              <span>Trader Role</span>
+              <select id="trade-role-filter-select">
+                <option value="all">All roles</option>
+                <option value="buyer">Buyer</option>
+                <option value="seller">Seller</option>
+                <option value="buyer-aggressive">Buyer aggressive</option>
+                <option value="buyer-passive">Buyer passive</option>
+                <option value="seller-aggressive">Seller aggressive</option>
+                <option value="seller-passive">Seller passive</option>
+              </select>
+            </label>
           </div>
 
           <div class="controls-actions">

@@ -111,6 +111,7 @@ const state = {
   showMarketTrades: true,
   showOwnTrades: true,
   showStrategyTrades: true,
+  tradeRoleFilter: "all",
   visibleLevels: { 1: true, 2: true, 3: true },
   visibleIndicators: new Set(["midPrice", "wallMid"]),
   hoveredTimestamp: null,
@@ -159,6 +160,8 @@ function bindElements() {
   els.timeMaxInput = document.getElementById("time-max-input");
   els.tradeMinInput = document.getElementById("trade-min-input");
   els.tradeMaxInput = document.getElementById("trade-max-input");
+  els.tradeTraderFilterInput = document.getElementById("trade-trader-filter-input");
+  els.tradeRoleFilterSelect = document.getElementById("trade-role-filter-select");
   els.resetRangeButton = document.getElementById("reset-range-button");
   els.showBidsToggle = document.getElementById("show-bids-toggle");
   els.showAsksToggle = document.getElementById("show-asks-toggle");
@@ -266,6 +269,13 @@ function bindEvents() {
   [els.tradeMinInput, els.tradeMaxInput].forEach((input) =>
     input.addEventListener("change", () => renderAll()),
   );
+
+  els.tradeTraderFilterInput.addEventListener("input", () => renderAll());
+
+  els.tradeRoleFilterSelect.addEventListener("change", (event) => {
+    state.tradeRoleFilter = event.target.value;
+    renderAll();
+  });
 
   els.resetRangeButton.addEventListener("click", () => {
     resetMainTimeRange();
@@ -1698,12 +1708,15 @@ function buildView(dataset, productData) {
   const noAsksRowCount = exclusiveBookHighlightBands.filter((band) => band.state === "noAsks").length;
   const tradeMin = Math.max(0, toNumber(els.tradeMinInput.value) ?? 0);
   const tradeMax = Math.max(tradeMin, toNumber(els.tradeMaxInput.value) ?? 999999);
+  const tradeTraderIds = getTradeTraderFilterIds();
+  const tradeRoleFilter = state.tradeRoleFilter || "all";
 
   const ownIds = getOwnTraderIds();
   const visibleTrades = productData.trades
     .filter((trade) => trade.timestamp >= rangeMin && trade.timestamp <= rangeMax)
     .map((trade) => decorateTrade(trade, productData.rowByTimestamp.get(trade.timestamp), ownIds))
     .filter((trade) => trade.quantity >= tradeMin && trade.quantity <= tradeMax)
+    .filter((trade) => matchesTradeTraderFilter(trade, tradeTraderIds, tradeRoleFilter))
     .filter((trade) => {
       if (trade.isOwn) {
         return state.showOwnTrades;
@@ -3621,15 +3634,20 @@ function normalizeStrategyTradeRow(row) {
 function decorateTrade(trade, bookRow, ownIds) {
   const normalizedBuyer = normalizeId(trade.buyer);
   const normalizedSeller = normalizeId(trade.seller);
+  const aggressorSide = inferAggressorSide(trade, bookRow);
 
   if (ownIds.has(normalizedBuyer)) {
-    return { ...trade, isOwn: true, side: "buy" };
+    return { ...trade, isOwn: true, side: "buy", aggressorSide };
   }
 
   if (ownIds.has(normalizedSeller)) {
-    return { ...trade, isOwn: true, side: "sell" };
+    return { ...trade, isOwn: true, side: "sell", aggressorSide };
   }
 
+  return { ...trade, isOwn: false, side: aggressorSide, aggressorSide };
+}
+
+function inferAggressorSide(trade, bookRow) {
   let side = "unknown";
   if (bookRow) {
     if (Number.isFinite(bookRow.bestAsk) && trade.price >= bookRow.bestAsk) {
@@ -3641,7 +3659,34 @@ function decorateTrade(trade, bookRow, ownIds) {
     }
   }
 
-  return { ...trade, isOwn: false, side };
+  return side;
+}
+
+function matchesTradeTraderFilter(trade, traderIds, roleFilter) {
+  if (!traderIds.size && roleFilter === "all") {
+    return true;
+  }
+
+  const buyerMatches = !traderIds.size || traderIds.has(normalizeId(trade.buyer));
+  const sellerMatches = !traderIds.size || traderIds.has(normalizeId(trade.seller));
+  const aggressorSide = trade.aggressorSide || trade.side || "unknown";
+
+  switch (roleFilter) {
+    case "buyer":
+      return buyerMatches;
+    case "seller":
+      return sellerMatches;
+    case "buyer-aggressive":
+      return buyerMatches && aggressorSide === "buy";
+    case "buyer-passive":
+      return buyerMatches && aggressorSide === "sell";
+    case "seller-aggressive":
+      return sellerMatches && aggressorSide === "sell";
+    case "seller-passive":
+      return sellerMatches && aggressorSide === "buy";
+    default:
+      return buyerMatches || sellerMatches;
+  }
 }
 
 function parseDelimitedText(text) {
@@ -3936,8 +3981,16 @@ function normalizePrice(row, price) {
 }
 
 function getOwnTraderIds() {
+  return splitNormalizedIds(els.ownTraderIdsInput.value);
+}
+
+function getTradeTraderFilterIds() {
+  return splitNormalizedIds(els.tradeTraderFilterInput.value);
+}
+
+function splitNormalizedIds(value) {
   return new Set(
-    els.ownTraderIdsInput.value
+    String(value || "")
       .split(",")
       .map((value) => normalizeId(value))
       .filter(Boolean),

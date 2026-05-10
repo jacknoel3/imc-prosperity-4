@@ -36,6 +36,7 @@ Built-in selectors:
 - order book depth over time
 - round 5-style interaction: drag to pan, mouse wheel to zoom, Shift-drag to zoom into a window, and double-click to reset
 - market trade overlays
+- market trade filters by quantity, trader ID, and buyer/seller aggressive or passive role
 - backtest trade overlays drawn on top of the market plot
 - own-trade highlighting when buyer or seller IDs are present
 - hoverable snapshot inspection

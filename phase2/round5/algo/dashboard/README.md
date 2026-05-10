@@ -31,6 +31,7 @@ http://localhost:8000/phase2/round5/algo/dashboard/
 
 - order book depth over time
 - market trade overlays
+- market trade filters by quantity, trader ID, and buyer/seller aggressive or passive role
 - backtest trade overlays drawn on top of the market plot
 - own-trade highlighting when buyer or seller IDs are present
 - hoverable snapshot inspection
