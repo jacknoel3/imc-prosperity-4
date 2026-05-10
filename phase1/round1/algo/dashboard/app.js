@@ -4,20 +4,20 @@ const BUILTIN_DATASETS = [
   {
     key: "round1-day-0",
     label: "Round 1 / Day 0 / ASH_COATED_OSMIUM + INTARIAN_PEPPER_ROOT",
-    pricePath: "../data/round1/prices_round_1_day_0.csv",
-    tradePath: "../data/round1/trades_round_1_day_0.csv",
+    pricePath: "../data/prices_round_1_day_0.csv",
+    tradePath: "../data/trades_round_1_day_0.csv",
   },
   {
     key: "round1-day--1",
     label: "Round 1 / Day -1 / ASH_COATED_OSMIUM + INTARIAN_PEPPER_ROOT",
-    pricePath: "../data/round1/prices_round_1_day_-1.csv",
-    tradePath: "../data/round1/trades_round_1_day_-1.csv",
+    pricePath: "../data/prices_round_1_day_-1.csv",
+    tradePath: "../data/trades_round_1_day_-1.csv",
   },
   {
     key: "round1-day--2",
     label: "Round 1 / Day -2 / ASH_COATED_OSMIUM + INTARIAN_PEPPER_ROOT",
-    pricePath: "../data/round1/prices_round_1_day_-2.csv",
-    tradePath: "../data/round1/trades_round_1_day_-2.csv",
+    pricePath: "../data/prices_round_1_day_-2.csv",
+    tradePath: "../data/trades_round_1_day_-2.csv",
   },
 ];
 
@@ -559,18 +559,22 @@ async function loadUploadedDataset() {
 }
 
 async function loadStrategyOverlay() {
-  const strategyFile = els.uploadStrategyTradesInput.files[0];
-  if (!strategyFile) {
-    setStatus("Choose a backtest trades CSV before loading the overlay.");
+  const strategyFiles = [...els.uploadStrategyTradesInput.files];
+  if (!strategyFiles.length) {
+    setStatus("Choose one or more backtest trade CSVs before loading the overlay.");
     return;
   }
 
   try {
     setStatus("Parsing backtest overlay...");
-    const strategyText = await strategyFile.text();
+    const strategyRowsRaw = await readStrategyTradeFiles(strategyFiles);
+    const strategyLabel =
+      strategyFiles.length === 1
+        ? strategyFiles[0].name
+        : `${strategyFiles.length} files: ${strategyFiles.map((file) => file.name).join(", ")}`;
     const overlay = buildStrategyOverlay({
-      label: strategyFile.name,
-      strategyRowsRaw: parseDelimitedText(strategyText),
+      label: strategyLabel,
+      strategyRowsRaw,
     });
 
     if (!overlay.products.size) {
@@ -594,9 +598,9 @@ async function loadStrategyOverlay() {
 
     renderAll();
     if (overlayProducts.length === 1) {
-      setStatus(`Loaded backtest overlay: ${strategyFile.name} for ${overlayProducts[0]}.`);
+      setStatus(`Loaded backtest overlay: ${strategyLabel} for ${overlayProducts[0]}.`);
     } else {
-      setStatus(`Loaded backtest overlay: ${strategyFile.name}`);
+      setStatus(`Loaded backtest overlay: ${strategyLabel}`);
     }
   } catch (error) {
     console.error(error);
@@ -3367,6 +3371,11 @@ function buildDataset({ key, label, priceRowsRaw, tradeRowsRaw, indicatorRowsRaw
     .filter((row) => row.product && Number.isFinite(row.timestamp))
     .sort((left, right) => {
       if (left.product === right.product) {
+        const leftDay = Number.isFinite(left.day) ? left.day : -Infinity;
+        const rightDay = Number.isFinite(right.day) ? right.day : -Infinity;
+        if (leftDay !== rightDay) {
+          return leftDay - rightDay;
+        }
         return left.timestamp - right.timestamp;
       }
       return left.product.localeCompare(right.product);
@@ -3597,6 +3606,7 @@ function normalizeStrategyTradeRow(row) {
       : "unknown");
 
   return {
+    day: firstNumberValue(row, ["day", "trading_day", "session_day", "__sourceDay"]),
     timestamp,
     product,
     price,
@@ -3727,6 +3737,35 @@ function readOptionalFile(file) {
   return file ? file.text() : Promise.resolve("");
 }
 
+async function readStrategyTradeFiles(files) {
+  const fileRows = await Promise.all(
+    files.map(async (file) => {
+      const text = await file.text();
+      const inferredDay = inferDayFromFilename(file.name);
+      return parseDelimitedText(text).map((row) => ({
+        ...row,
+        __sourceFileName: file.name,
+        __sourceDay: inferredDay,
+      }));
+    }),
+  );
+
+  return fileRows.flat();
+}
+
+function inferDayFromFilename(filename) {
+  const normalized = String(filename || "").toLowerCase();
+  const match =
+    normalized.match(/(?:^|[^a-z0-9])day[_\-\s+]*(-?\d+)/) ||
+    normalized.match(/round[_\-\s]*\d+[_\-\s]*day[_\-\s+]*(-?\d+)/);
+  if (!match) {
+    return null;
+  }
+
+  const day = Number.parseInt(match[1], 10);
+  return Number.isFinite(day) ? day : null;
+}
+
 function prepareCanvas(canvas) {
   const rect = canvas.getBoundingClientRect();
   const width = Math.max(1, Math.floor(rect.width));
@@ -3761,7 +3800,30 @@ function getStrategyProductData() {
     return null;
   }
 
-  return state.strategyOverlay.products.get(state.selectedProduct) || null;
+  const strategyProduct = state.strategyOverlay.products.get(state.selectedProduct) || null;
+  if (!strategyProduct) {
+    return null;
+  }
+
+  const productData = getActiveProductData();
+  if (!productData) {
+    return strategyProduct;
+  }
+
+  const activeDays = new Set(
+    productData.rows.map((row) => row.day).filter((day) => Number.isFinite(day)),
+  );
+  const overlayHasDayInfo = strategyProduct.trades.some((trade) => Number.isFinite(trade.day));
+  if (!activeDays.size || !overlayHasDayInfo) {
+    return strategyProduct;
+  }
+
+  return {
+    ...strategyProduct,
+    trades: strategyProduct.trades.filter(
+      (trade) => !Number.isFinite(trade.day) || activeDays.has(trade.day),
+    ),
+  };
 }
 
 function getHoveredRow(view) {

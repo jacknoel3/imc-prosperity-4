@@ -2,16 +2,22 @@
 
 const BUILTIN_DATASETS = [
   {
-    key: "round0-day--1",
-    label: "Round 0 / Day -1 / EMERALDS + TOMATOES",
-    pricePath: "../data/prices_round_0_day_-1.csv",
-    tradePath: "../data/trades_round_0_day_-1.csv",
+    key: "round2-day-1",
+    label: "Round 2 / Day 1 / ASH_COATED_OSMIUM + INTARIAN_PEPPER_ROOT",
+    pricePath: "../data/prices_round_2_day_1.csv",
+    tradePath: "../data/trades_round_2_day_1.csv",
   },
   {
-    key: "round0-day--2",
-    label: "Round 0 / Day -2 / EMERALDS + TOMATOES",
-    pricePath: "../data/prices_round_0_day_-2.csv",
-    tradePath: "../data/trades_round_0_day_-2.csv",
+    key: "round2-day-0",
+    label: "Round 2 / Day 0 / ASH_COATED_OSMIUM + INTARIAN_PEPPER_ROOT",
+    pricePath: "../data/prices_round_2_day_0.csv",
+    tradePath: "../data/trades_round_2_day_0.csv",
+  },
+  {
+    key: "round2-day--1",
+    label: "Round 2 / Day -1 / ASH_COATED_OSMIUM + INTARIAN_PEPPER_ROOT",
+    pricePath: "../data/prices_round_2_day_-1.csv",
+    tradePath: "../data/trades_round_2_day_-1.csv",
   },
 ];
 
@@ -58,29 +64,34 @@ const CUSTOM_LINE_PALETTE = [
   "rgba(118, 104, 57, 0.92)",
 ];
 
-const SYNTHETIC_PRODUCTS = ["EMERALDS", "TOMATOES"];
+const SYNTHETIC_PRODUCTS = ["ASH_COATED_OSMIUM", "INTARIAN_PEPPER_ROOT"];
 
 const SYNTHETIC_SOURCE_OPTIONS = [
   {
     key: "all-days",
-    label: "All Round 0 Days (-2, -1)",
-    datasetKeys: ["round0-day--2", "round0-day--1"],
+    label: "All Round 2 Days (-1, 0, 1)",
+    datasetKeys: ["round2-day--1", "round2-day-0", "round2-day-1"],
   },
   {
-    key: "round0-day--2",
-    label: "Day -2 Only",
-    datasetKeys: ["round0-day--2"],
-  },
-  {
-    key: "round0-day--1",
+    key: "round2-day--1",
     label: "Day -1 Only",
-    datasetKeys: ["round0-day--1"],
+    datasetKeys: ["round2-day--1"],
+  },
+  {
+    key: "round2-day-0",
+    label: "Day 0 Only",
+    datasetKeys: ["round2-day-0"],
+  },
+  {
+    key: "round2-day-1",
+    label: "Day 1 Only",
+    datasetKeys: ["round2-day-1"],
   },
 ];
 
 const SYNTHETIC_METHOD_TEXT = [
   "approach: block bootstrap rather than curve fitting",
-  "source blocks: contiguous slices from the real Round 0 tapes",
+  "source blocks: contiguous slices from the real Round 2 tapes",
   "state carried over: mid-price deltas, spread regime, depth offsets, and trade bursts",
   "re-centering: each borrowed book shape is moved onto a synthetic mid path",
   "why this helps: local microstructure stays realistic, but the exact day path is no longer memorized",
@@ -114,7 +125,7 @@ const state = {
   syntheticSourceCache: new Map(),
   syntheticLab: {
     sourceKey: "all-days",
-    product: "EMERALDS",
+    product: "INTARIAN_PEPPER_ROOT",
     scenarioCount: 24,
     horizonRows: 600,
     blockLength: 24,
@@ -723,7 +734,7 @@ function renderSyntheticLab() {
   els.syntheticMethodCard.textContent = SYNTHETIC_METHOD_TEXT;
 
   if (!state.syntheticLab.generated) {
-    els.syntheticDatasetSummary.textContent = "Resample the real Round 0 tape into new market scenarios.";
+    els.syntheticDatasetSummary.textContent = "Resample the real Round 2 tape into new market scenarios.";
     els.syntheticChartSummary.textContent = "Generate a batch to begin.";
     els.syntheticLegendNote.textContent =
       "The lab draws a percentile band plus sample paths from the generated ensemble. Open a scenario in replay when you want to inspect the synthetic order book row by row.";

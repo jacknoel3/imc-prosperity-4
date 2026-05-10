@@ -1,6 +1,6 @@
-# Prosperity Round 1 Dashboard
+# Prosperity Round 2 Dashboard
 
-This is the new round 1 dashboard for the Intara market:
+This is the round 2 dashboard for the Intara market:
 
 - `ASH_COATED_OSMIUM`
 - `INTARIAN_PEPPER_ROOT`
@@ -8,9 +8,9 @@ This is the new round 1 dashboard for the Intara market:
 If you want the older tutorial-style view for `EMERALDS` and `TOMATOES`, open
 `http://localhost:8000/phase1/round0/dashboard/`.
 
-## Round 1 Context
+## Round 2 Context
 
-- phase: `Trading Groundwork`
+- phase: `Trading Groundwork`, later public days
 - planet: `Intara`
 - objective: `200,000 XIRECs` net profit before the beginning of day 3
 - `ASH_COATED_OSMIUM`: fixed fair value around `10,000`, classical stationary market-making product
@@ -33,14 +33,14 @@ py -m http.server 8000
 Then open:
 
 ```text
-http://localhost:8000/phase1/round1/algo/dashboard/
+http://localhost:8000/phase1/round2/algo/dashboard/
 ```
 
 Built-in selectors:
 
-- `Round 1 / Day 0 / ASH_COATED_OSMIUM + INTARIAN_PEPPER_ROOT`
-- `Round 1 / Day -1 / ASH_COATED_OSMIUM + INTARIAN_PEPPER_ROOT`
-- `Round 1 / Day -2 / ASH_COATED_OSMIUM + INTARIAN_PEPPER_ROOT`
+- `Round 2 / Day 1 / ASH_COATED_OSMIUM + INTARIAN_PEPPER_ROOT`
+- `Round 2 / Day 0 / ASH_COATED_OSMIUM + INTARIAN_PEPPER_ROOT`
+- `Round 2 / Day -1 / ASH_COATED_OSMIUM + INTARIAN_PEPPER_ROOT`
 
 ## What It Shows
 
@@ -54,7 +54,7 @@ Built-in selectors:
 - indicator overlays
 - optional synced logs
 - PnL and position panels when your own strategy data is available
-- a separate `Synthetic Lab` tab for Monte Carlo-style block-bootstrap scenarios built from the real round 1 tape
+- a separate `Synthetic Lab` tab for Monte Carlo-style block-bootstrap scenarios built from the real round 2 tape
 
 ## Strategy Workflow
 
@@ -63,9 +63,9 @@ directly into the dashboard.
 
 Typical flow:
 
-1. Run your round 1 strategy in your backtester.
+1. Run your round 2 strategy in your backtester.
 2. Export your fills to a `Backtest Trades CSV`.
-3. Pick the round 1 market dataset you want as the background.
+3. Pick the round 2 market dataset you want as the background.
 4. Load the `Backtest Trades CSV` as an overlay.
 
 For built-in data, you usually only need:
@@ -93,14 +93,14 @@ Optional extras:
 
 ## Built-In Data
 
-The round 1 dashboard reads:
+The round 2 dashboard reads:
 
-- `phase1/round1/algo/data/prices_round_1_day_0.csv`
-- `phase1/round1/algo/data/prices_round_1_day_-1.csv`
-- `phase1/round1/algo/data/prices_round_1_day_-2.csv`
-- `phase1/round1/algo/data/trades_round_1_day_0.csv`
-- `phase1/round1/algo/data/trades_round_1_day_-1.csv`
-- `phase1/round1/algo/data/trades_round_1_day_-2.csv`
+- `phase1/round2/algo/data/prices_round_2_day_1.csv`
+- `phase1/round2/algo/data/prices_round_2_day_0.csv`
+- `phase1/round2/algo/data/prices_round_2_day_-1.csv`
+- `phase1/round2/algo/data/trades_round_2_day_1.csv`
+- `phase1/round2/algo/data/trades_round_2_day_0.csv`
+- `phase1/round2/algo/data/trades_round_2_day_-1.csv`
 
 Public trade files do not reliably identify your trader, so market-trade direction
 is inferred from trade price versus the current book unless the trade matches one of
@@ -121,15 +121,15 @@ Backtest Trades CSV:
 
 ```text
 day,timestamp,product,price,quantity,side,pnl,position
-0,200,ASH_COATED_OSMIUM,10003,5,sell,-15,-5
-0,5200,INTARIAN_PEPPER_ROOT,12001,3,buy,23,-1
-0,6300,ASH_COATED_OSMIUM,10008,2,sell,24,-7
+1,200,ASH_COATED_OSMIUM,10003,5,sell,-15,-5
+1,5200,INTARIAN_PEPPER_ROOT,12001,3,buy,23,-1
+1,6300,ASH_COATED_OSMIUM,10008,2,sell,24,-7
 ```
 
 - required fields: `timestamp`, `product` or `symbol`, `price`, and either `quantity` + `side`
 - signed quantity fields such as `signed_quantity` also work
 - optional fields: `day`, `pnl`, `position`
-- you can upload one backtest CSV or multiple per-day CSVs; filenames like `day_0` or `day_-1` are used when a file has no `day` column
+- you can upload one backtest CSV or multiple per-day CSVs; filenames like `day_1` or `day_0` are used when a file has no `day` column
 
 Examples of accepted backtest trade formats:
 

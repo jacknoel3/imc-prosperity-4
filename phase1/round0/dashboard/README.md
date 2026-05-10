@@ -14,10 +14,16 @@ From the repo root:
 python3 -m http.server 8000
 ```
 
+On Windows, use:
+
+```powershell
+py -m http.server 8000
+```
+
 Then open:
 
 ```text
-http://localhost:8000/dashboard/
+http://localhost:8000/phase1/round0/dashboard/
 ```
 
 Built-in selectors:
@@ -28,6 +34,7 @@ Built-in selectors:
 ## What It Shows
 
 - order book depth over time
+- round 5-style interaction: drag to pan, mouse wheel to zoom, Shift-drag to zoom into a window, and double-click to reset
 - market trade overlays
 - backtest trade overlays drawn on top of the market plot
 - own-trade highlighting when buyer or seller IDs are present
@@ -36,6 +43,7 @@ Built-in selectors:
 - indicator overlays
 - optional synced logs
 - PnL and position panels when your own strategy data is available
+- a `Synthetic Lab` tab that block-resamples the real round 0 tape
 
 ## Strategy Workflow
 
@@ -69,10 +77,10 @@ Optional extras:
 
 The round 0 dashboard reads:
 
-- `data/round0/prices_round_0_day_-1.csv`
-- `data/round0/prices_round_0_day_-2.csv`
-- `data/round0/trades_round_0_day_-1.csv`
-- `data/round0/trades_round_0_day_-2.csv`
+- `phase1/round0/data/prices_round_0_day_-1.csv`
+- `phase1/round0/data/prices_round_0_day_-2.csv`
+- `phase1/round0/data/trades_round_0_day_-1.csv`
+- `phase1/round0/data/trades_round_0_day_-2.csv`
 
 Public round 0 trades do not include trader IDs, so market-trade direction is
 inferred from trade price versus the current book unless the trade matches one of
@@ -92,15 +100,16 @@ Trade CSV:
 Backtest Trades CSV:
 
 ```text
-timestamp,product,price,quantity,side,pnl,position
-100,EMERALDS,9998,5,buy,0,5
-400,EMERALDS,10002,5,sell,20,0
-700,TOMATOES,5009,3,sell,17,2
+day,timestamp,product,price,quantity,side,pnl,position
+-1,100,EMERALDS,9998,5,buy,0,5
+-1,400,EMERALDS,10002,5,sell,20,0
+-1,700,TOMATOES,5009,3,sell,17,2
 ```
 
 - required fields: `timestamp`, `product` or `symbol`, `price`, and either `quantity` + `side`
 - signed quantity fields such as `signed_quantity` also work
-- optional fields: `pnl`, `position`
+- optional fields: `day`, `pnl`, `position`
+- you can upload one backtest CSV or multiple per-day CSVs; filenames like `day_-1` are used when a file has no `day` column
 
 Examples of accepted backtest trade formats:
 
