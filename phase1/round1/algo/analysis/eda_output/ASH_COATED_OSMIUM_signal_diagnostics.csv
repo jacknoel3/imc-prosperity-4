@@ -1,6 +1,0 @@
-metric,value
-"corr(imbalance_l1, fwd_ret_1)",0.38093934506988825
-"corr(imbalance_l1, fwd_ret_5)",0.3674012176480823
-"corr(imbalance_l1, fwd_ret_10)",0.35167467904634003
-"corr(microprice_minus_mid, fwd_ret_1)",0.32219169142909754
-"corr(spread, abs(dmid))",-0.22906565336337348

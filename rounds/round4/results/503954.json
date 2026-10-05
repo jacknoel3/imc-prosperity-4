@@ -1,0 +1,31 @@
+{
+  "round": 4,
+  "run_id": "503954",
+  "kind": "recorded_candidate_test",
+  "status": "FINISHED",
+  "profit": 12604.747924804688,
+  "official_leaderboard_result": false,
+  "algorithm": "rounds/round4/algo/strat48.py",
+  "observed_timestamps": 1000,
+  "sampled_curve_max_drawdown": 9050.503295898438,
+  "product_pnl": {
+    "VEV_5000": 5608.53515625,
+    "VEV_6000": 0.0,
+    "VEV_4000": -294.767578125,
+    "VEV_5100": 4929.44921875,
+    "VELVETFRUIT_EXTRACT": 458.640625,
+    "VEV_5200": 2875.5693359375,
+    "HYDROGEL_PACK": 214.0,
+    "VEV_6500": 0.0,
+    "VEV_5300": -205.92138671875,
+    "VEV_5400": -129.0137939453125,
+    "VEV_5500": 0.0,
+    "VEV_4500": -851.74365234375
+  },
+  "original_path": "phase2/round4/algo/backtests/strat48_round4_hgp_hard_voucher_soft_logs/503954.json",
+  "original_sha256": "8b94fad0f23610d4eb4c3e1fae8ded0fe1deb44e06941fbc1f40e05701b7f790",
+  "source_commit": "ef4f269590ccb6d84274b1165fe8d786009b5de9",
+  "activity_last_timestamp": 99900,
+  "curve_last_timestamp": 99800,
+  "curve_final_sample_profit": 13267.965576171875
+}

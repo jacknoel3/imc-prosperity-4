@@ -1,0 +1,21 @@
+{
+  "round": 1,
+  "run_id": "266953",
+  "kind": "recorded_1000_step_backtest",
+  "status": "FINISHED",
+  "profit": 11565.84375,
+  "official_leaderboard_result": false,
+  "algorithm": "rounds/round1/algo/trader.py",
+  "observed_timestamps": 1000,
+  "sampled_curve_max_drawdown": 545.0,
+  "product_pnl": {
+    "INTARIAN_PEPPER_ROOT": 7383.0,
+    "ASH_COATED_OSMIUM": 4182.84375
+  },
+  "original_path": "phase1/round1/algo/backtests/final_submission/round1_final_backtest_1k_timestamps/266953.json",
+  "original_sha256": "45773c56eac61afd2073e09b60266e5a2c6d2770fc3d9938b659883735ec0a8f",
+  "source_commit": "ef4f269590ccb6d84274b1165fe8d786009b5de9",
+  "activity_last_timestamp": 99900,
+  "curve_last_timestamp": 99800,
+  "curve_final_sample_profit": 11557.64453125
+}

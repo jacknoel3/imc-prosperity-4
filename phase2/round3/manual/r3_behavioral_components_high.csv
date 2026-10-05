@@ -1,8 +1,0 @@
-component,kind,mass,reference_mean,target_bid,expected_component_bid,sigma
-pure_best_response,pure_best_response,0.3,882.9523542198095,883.0,882.6650715525955,0.9
-minimum_clear,minimum_clear,0.1,880.6047365088191,881.0,881.2279211322486,0.8
-one_level_buffer,level_buffer,0.32,880.6047365088191,881.0,881.2959665111808,1.1
-two_level_buffer,level_buffer,0.2,878.2571187978285,886.0,886.2998393600841,1.2
-three_level_buffer,level_buffer,0.07,875.9095010868381,886.0,886.2607902140875,1.5
-pure_no_penalty_anchor,fixed,0.002,882.9523542198095,836.0,836.3048447786858,0.8
-qualified_noise,noisy_qualified,0.008,880.6047365088191,880.6047365088191,880.5713589975044,5.0

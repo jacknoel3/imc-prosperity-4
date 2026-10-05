@@ -1,3 +1,0 @@
-timestamp,product,price,quantity,side,pnl,position,fill_type
-2500,VELVETFRUIT_EXTRACT,5250,2,buy,0,2,sample_fill
-2900,VEV_5400,22,1,sell,2,1,sample_fill

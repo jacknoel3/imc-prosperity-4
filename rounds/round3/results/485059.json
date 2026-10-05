@@ -1,0 +1,31 @@
+{
+  "round": 3,
+  "run_id": "485059",
+  "kind": "recorded_10000_step_run",
+  "status": "FINISHED",
+  "profit": 24505.25860595703,
+  "official_leaderboard_result": false,
+  "algorithm": "rounds/round3/algo/trader.py",
+  "observed_timestamps": 10000,
+  "sampled_curve_max_drawdown": 42598.796325683594,
+  "product_pnl": {
+    "VEV_5500": 0.0,
+    "HYDROGEL_PACK": 6837.375,
+    "VEV_4500": 317.12109375,
+    "VEV_6500": 0.0,
+    "VEV_5300": -1255.666015625,
+    "VEV_5400": -704.1378784179688,
+    "VEV_4000": 527.095703125,
+    "VEV_5100": 6048.16015625,
+    "VEV_5200": 1217.482421875,
+    "VEV_5000": 9379.046875,
+    "VEV_6000": 0.0,
+    "VELVETFRUIT_EXTRACT": 2138.78125
+  },
+  "original_path": "phase2/round3/algo/backtests/final_submission/round3_live_simulation_10k_timestamps/485059.json",
+  "original_sha256": "69519cf631b6e1d751d39af704f6fc828b99f847fa69ee3d5a690fd338fade1a",
+  "source_commit": "ef4f269590ccb6d84274b1165fe8d786009b5de9",
+  "activity_last_timestamp": 999900,
+  "curve_last_timestamp": 998000,
+  "curve_final_sample_profit": 26129.052368164062
+}

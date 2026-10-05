@@ -1,0 +1,12 @@
+round,run_id,kind,profit,observed_timestamps,sampled_curve_max_drawdown,algorithm
+1,266953,recorded_1000_step_backtest,11565.84375,1000,545.0,rounds/round1/algo/trader.py
+1,273140,recorded_10000_step_run,107280.52734375,10000,444.2578125,rounds/round1/algo/trader.py
+2,356997,recorded_1000_step_backtest,10469.53125,1000,529.0703125,rounds/round2/algo/trader.py
+2,361780,recorded_10000_step_run,95843.078125,10000,435.66796875,rounds/round2/algo/trader.py
+3,482503,recorded_1000_step_backtest,22726.025192260742,1000,3919.084503173828,rounds/round3/algo/trader.py
+3,485059,recorded_10000_step_run,24505.25860595703,10000,42598.796325683594,rounds/round3/algo/trader.py
+4,503954,recorded_candidate_test,12604.747924804688,1000,9050.503295898438,rounds/round4/algo/strat48.py
+4,517405,recorded_candidate_test,20804.002899169922,1000,7488.037483215332,rounds/round4/algo/lucas_v1.py
+4,540061,recorded_candidate_test,14508.412658691406,1000,8356.581909179688,rounds/round4/algo/ale61.py
+4,540536,recorded_candidate_test,14613.277893066406,1000,8215.055541992188,rounds/round4/algo/strat62.py
+4,541207,recorded_candidate_test,21709.002899169922,1000,6848.842170715332,rounds/round4/algo/composite.py

@@ -1,0 +1,7 @@
+-r requirements.txt
+scipy>=1.11
+statsmodels>=0.14
+scikit-learn>=1.3
+arch>=6.0
+hmmlearn>=0.3
+jupyterlab>=4.0

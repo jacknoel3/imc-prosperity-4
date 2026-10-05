@@ -1,3 +1,0 @@
-product,n_trades,avg_quantity,median_quantity,buy_aggr_count,sell_aggr_count,mid_count,trade_minus_mid_mean,trade_minus_mid_std
-EMERALDS,399,5.486215538847118,6.0,195,204,0,-0.18045112781954886,7.855959476312221
-TOMATOES,820,3.479268292682927,3.0,387,433,0,-0.3231707317073171,6.5330342829907195
